@@ -44,6 +44,7 @@ jobs:
           fi
 
           read -r state draft head_sha <<< "$(gh pr view "$pr" \
+            --repo "$GITHUB_REPOSITORY" \
             --json state,isDraft,headRefOid \
             --jq '[.state, (.isDraft|tostring), .headRefOid] | @tsv')"
           if [[ "$state" != "OPEN" ]]; then
@@ -60,4 +61,4 @@ jobs:
           fi
 
           echo "Merging PR #${pr} (verified at ${VERIFIED_SHA})"
-          gh pr merge "$pr" --squash --delete-branch
+          gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --squash --delete-branch
