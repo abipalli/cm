@@ -133,16 +133,6 @@ function renderChart(data) {
   });
 }
 
-function summarize(text) {
-  if (!text) return "";
-  return text
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/^\s*(\d+\.|[-*])\s*/gm, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function compactDelta(e) {
   if (!e.delta || e.delta.includes("baseline")) return "—";
   if (e.deltaValue != null) {
@@ -179,7 +169,6 @@ function renderGrid(data) {
         <td class="c-score">${fmt(e.score)}</td>
         <td class="c-delta"><span class="badge ${deltaClass}">${escapeHtml(compactDelta(e))}</span></td>
         <td class="c-zstd">${escapeHtml(e.vsZstd)}</td>
-        <td class="c-note"><span class="note-1">${escapeHtml(summarize(e.note))}</span></td>
         <td class="c-open"><span class="open-btn">View ↗</span></td>
       </tr>`;
     })
@@ -188,7 +177,7 @@ function renderGrid(data) {
   $("#grid").innerHTML = `
     <colgroup>
       <col class="w-id" /><col class="w-author" /><col class="w-score" />
-      <col class="w-delta" /><col class="w-zstd" /><col class="w-note" /><col class="w-open" />
+      <col class="w-delta" /><col class="w-zstd" /><col class="w-open" />
     </colgroup>
     <thead>
       <tr>
@@ -197,7 +186,6 @@ function renderGrid(data) {
         <th class="c-score">SCORE</th>
         <th class="c-delta">Δ</th>
         <th class="c-zstd">vs zstd</th>
-        <th class="c-note">Comment</th>
         <th class="c-open"></th>
       </tr>
     </thead>

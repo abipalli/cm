@@ -145,7 +145,6 @@ col.w-author { width: 162px; }
 col.w-score { width: 100px; }
 col.w-delta { width: 112px; }
 col.w-zstd { width: 84px; }
-col.w-note { width: auto; }
 col.w-open { width: 96px; }
 
 table.leaderboard th,
@@ -229,8 +228,6 @@ table.leaderboard tbody tr.record td.c-id { box-shadow: inset 3px 0 0 var(--good
 }
 .badge.good { color: var(--good); background: var(--good-soft); border-color: rgba(61, 220, 151, 0.3); }
 .badge.flat { color: var(--muted); background: rgba(139, 155, 178, 0.12); }
-
-.c-note .note-1 { color: #b9c6da; font-size: 0.86rem; }
 
 .c-open { text-align: right; overflow: visible; }
 .open-btn {
