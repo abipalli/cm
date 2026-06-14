@@ -8,14 +8,16 @@
 
 use super::tables::{build, squash_d};
 
-const NCTX: usize = 9; // context models: orders 0..6 + word + sparse
-const NINPUT: usize = NCTX + 1; // + match model
+const NCTX: usize = 10; // context models: orders 0..7 + word + sparse
+const NINPUT: usize = NCTX + 2; // + two match models (order-6 and order-8)
 const TBITS: u32 = 22;
 const TSIZE: usize = 1 << TBITS;
 const TMASK: u32 = (TSIZE as u32) - 1;
 const MIXCTX: usize = 1024;
 const MMBITS: u32 = 22;
 const MMSIZE: usize = 1 << MMBITS;
+const MMBITS2: u32 = 22;
+const MMSIZE2: usize = 1 << MMBITS2;
 const APM_S: usize = 33;
 const CNT_LIMIT: i32 = 254;
 const RATE_FLOOR: i32 = 24;
@@ -86,6 +88,13 @@ pub struct Cm {
     mm_sm: [u16; 80],
     mm_used: bool,
     mm_idx: usize,
+    mmtab2: Vec<u32>,
+    matchptr2: u32,
+    matchlen2: i32,
+    predicted_byte2: i32,
+    mm_sm2: [u16; 80],
+    mm_used2: bool,
+    mm_idx2: usize,
     apm1: Apm,
     apm2: Apm,
     c0: i32,
@@ -138,6 +147,13 @@ impl Cm {
             mm_sm: [2048; 80],
             mm_used: false,
             mm_idx: 0,
+            mmtab2: vec![0u32; MMSIZE2],
+            matchptr2: 0,
+            matchlen2: 0,
+            predicted_byte2: -1,
+            mm_sm2: [2048; 80],
+            mm_used2: false,
+            mm_idx2: 0,
             apm1,
             apm2,
             c0: 1,
@@ -173,6 +189,17 @@ impl Cm {
         };
         self.ctxhash[7] = if self.wordhash != 0 { hashk(0x700, self.wordhash) } else { 0 };
         self.ctxhash[8] = hashk(0x800, ((c4 >> 8) & 0xff) | (((c4 >> 16) & 0xff) << 8));
+        self.ctxhash[9] = if self.pos >= 7 {
+            hashk(
+                0x900,
+                c4.wrapping_mul(0x9E37_79B1)
+                    ^ ((self.b(self.pos - 5) as u32).wrapping_mul(0x85eb_ca6b))
+                    ^ ((self.b(self.pos - 6) as u32).wrapping_mul(0xc2b2_ae35))
+                    ^ ((self.b(self.pos - 7) as u32).wrapping_mul(0x27d4_eb2f)),
+            )
+        } else {
+            hashk(0x900, c4)
+        };
     }
 
     #[inline]
@@ -196,7 +223,24 @@ impl Cm {
                 self.matchlen = 0;
             }
         }
-        self.mixsel = (((if self.matchlen > 0 { 1 } else { 0 }) << 8) | self.c1) as usize & (MIXCTX - 1);
+        self.mm_used2 = false;
+        self.mix_in[NCTX + 1] = 0;
+        if self.matchlen2 > 0 && self.predicted_byte2 >= 0 {
+            let sofar = self.c0 - (1 << self.bitcount);
+            if sofar == (self.predicted_byte2 >> (8 - self.bitcount)) {
+                let expected_bit = (self.predicted_byte2 >> (7 - self.bitcount)) & 1;
+                let li = if self.matchlen2 > 32 { 32 } else { self.matchlen2 };
+                self.mm_idx2 = ((li << 1) | expected_bit) as usize;
+                self.mix_in[NCTX + 1] = self.stretch[self.mm_sm2[self.mm_idx2] as usize];
+                self.mm_used2 = true;
+            } else {
+                self.matchlen2 = 0;
+            }
+        }
+        self.mixsel = (((if self.matchlen2 > 0 { 1 } else { 0 }) << 9)
+            | ((if self.matchlen > 0 { 1 } else { 0 }) << 8)
+            | self.c1) as usize
+            & (MIXCTX - 1);
         let base = self.mixsel * NINPUT;
         let mut dot: i64 = 0;
         for i in 0..NINPUT {
@@ -230,6 +274,10 @@ impl Cm {
             let v = self.mm_sm[self.mm_idx] as i32;
             self.mm_sm[self.mm_idx] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 6)) as u16;
         }
+        if self.mm_used2 {
+            let v = self.mm_sm2[self.mm_idx2] as i32;
+            self.mm_sm2[self.mm_idx2] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 6)) as u16;
+        }
         let err = (bit << 12) - p;
         let base = self.mixsel * NINPUT;
         for i in 0..NINPUT {
@@ -255,6 +303,14 @@ impl Cm {
                     if self.matchlen < 0x3ff { self.matchlen += 1; }
                 } else {
                     self.matchlen = 0;
+                }
+            }
+            if self.matchlen2 > 0 {
+                if (self.predicted_byte2 & 0xff) as u8 == byte {
+                    self.matchptr2 += 1;
+                    if self.matchlen2 < 0x3ff { self.matchlen2 += 1; }
+                } else {
+                    self.matchlen2 = 0;
                 }
             }
             let bp = (self.pos & self.bufmask) as usize;
@@ -289,8 +345,36 @@ impl Cm {
                     self.matchlen = if l > 0 { l } else { 1 };
                 }
             }
+            if self.pos >= 8 {
+                let h2 = (self.c4.wrapping_mul(2654435761)
+                    .wrapping_add((self.b(self.pos - 5) as u32).wrapping_mul(0x85eb_ca6b))
+                    .wrapping_add((self.b(self.pos - 6) as u32).wrapping_mul(0xc2b2_ae35))
+                    .wrapping_add((self.b(self.pos - 7) as u32).wrapping_mul(0x27d4_eb2f))
+                    .wrapping_add((self.b(self.pos - 8) as u32).wrapping_mul(0x1656_67b1)))
+                    >> (32 - MMBITS2);
+                let cand = self.mmtab2[h2 as usize];
+                self.mmtab2[h2 as usize] = self.pos;
+                if self.matchlen2 == 0 && cand > 0 && cand < self.pos {
+                    self.matchptr2 = cand;
+                    let mut l: i32 = 0;
+                    while l < 0x3ff
+                        && cand > l as u32
+                        && self.pos > (l as u32 + 1)
+                        && self.b(cand - 1 - l as u32) == self.b(self.pos - 1 - l as u32)
+                    {
+                        l += 1;
+                    }
+                    // Long-match specialist: only engage on genuinely long repeats.
+                    self.matchlen2 = if l >= 8 { l } else { 0 };
+                }
+            }
             self.predicted_byte = if self.matchlen > 0 && self.matchptr < self.pos {
                 self.b(self.matchptr) as i32
+            } else {
+                -1
+            };
+            self.predicted_byte2 = if self.matchlen2 > 0 && self.matchptr2 < self.pos {
+                self.b(self.matchptr2) as i32
             } else {
                 -1
             };
