@@ -4,35 +4,67 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-  pull-requests: read
-
 concurrency:
   group: scorekeeper-main
   cancel-in-progress: false
 
 jobs:
-  scorekeeper:
+  # SCORE: builds and runs the (untrusted) merged competitor code to compute the
+  # authoritative score and generate the ledger files. Read-only token, NO PAT —
+  # so a malicious submission cannot steal a push-capable credential here.
+  score:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-          # The ledger push targets protected `main`. The default GITHUB_TOKEN
-          # (github-actions[bot]) cannot bypass the branch ruleset on a personal
-          # repo, so use SCOREKEEPER_PAT (a maintainer/admin token) when present;
-          # its push bypasses as an admin. Falls back to the default token.
-          token: ${{ secrets.SCOREKEEPER_PAT || github.token }}
-          persist-credentials: true
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Record verified submission
+      - name: Compute score and generate ledger (untrusted code; no secret)
         env:
-          GH_TOKEN: ${{ secrets.SCOREKEEPER_PAT || github.token }}
+          GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_EVENT_HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-        run: bash scripts/ci-scorekeeper.sh
+          OUT_DIR: ledger-out
+        run: bash scripts/ci-score.sh
+
+      - name: Upload ledger artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger
+          path: ledger-out/
+          if-no-files-found: ignore
+          retention-days: 1
+
+  # PUBLISH: holds the privileged push token but runs NO competitor code. It only
+  # applies the precomputed ledger files and pushes them to protected main.
+  publish:
+    needs: score
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.SCOREKEEPER_PAT || github.token }}
+          persist-credentials: true
+
+      - name: Download ledger artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ledger
+          path: ledger-in
+
+      - name: Publish ledger (privileged; no competitor code)
+        env:
+          IN_DIR: ledger-in
+        run: bash scripts/ci-publish.sh

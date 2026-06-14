@@ -62,8 +62,14 @@ only ever touch `main` through a gated PR.
 Flow: **Verify PR** passes → **Auto-merge** squash-merges (default
 `GITHUB_TOKEN`, via a `workflow_run` job) → **Scorekeeper** records the verified
 ledger. Local scores and hand-edited `RESULTS.md` / `history/entries/` are
-rejected by CI (`ci-scorekeeper.sh` fails any push that touches the ledger
-without a matching algorithm change).
+rejected by CI (`ci-score.sh` fails any push that touches the ledger without a
+matching algorithm change).
+
+Scorekeeper runs in two isolated jobs so the push token is never exposed to
+competitor code: a **score** job (read-only token) builds and runs the merged
+algorithm to compute the result and generate the ledger files, then a **publish**
+job (holding `SCOREKEEPER_PAT`, running no competitor code) commits and pushes
+them. This prevents a malicious submission from exfiltrating the token.
 
 ### Maintainer setup
 
