@@ -10,20 +10,15 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
   exit 2
 fi
 
-changed=()
-while IFS= read -r f; do
-  [[ -n "$f" ]] && changed+=("$f")
-done < <( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u )
-
 violations=()
-for f in "${changed[@]}"; do
+while IFS= read -r f; do
   [[ -z "$f" ]] && continue
   case "$f" in
     src/algorithm/*) ;;
     RESULTS.md) ;;
     *) violations+=("$f") ;;
   esac
-done
+done < <( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u )
 
 if (( ${#violations[@]} )); then
   echo "BOUNDARY VIOLATION — these frozen files were modified:"
