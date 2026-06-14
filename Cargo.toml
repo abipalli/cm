@@ -1,0 +1,18 @@
+[package]
+name = "cm"
+version = "0.1.0"
+edition = "2021"
+description = "Context-mixing compressor with a frozen autoresearch harness"
+
+[lib]
+name = "cm"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cm"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
