@@ -44,7 +44,8 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0037 | 2026-06-15 | @10d9e | 578672 | -1 (new record) | +16.34% | `aa300ac` | [0037](history/entries/0037--10d9e.md) | Memory optimization. The six match-model hash tables were sized at 2^23..2^26 en… |
 | 0038 | 2026-06-15 | @10d9e | 578672 | 0 (tie) | +16.34% | `de442dd` | [0038](history/entries/0038--10d9e.md) | Memory optimization with provably identical output. The order-0 context model ha… |
 | 0039 | 2026-06-15 | @10d9e | 578672 | 0 (tie) | +16.34% | `c71ba05` | [0039](history/entries/0039--10d9e.md) | Memory optimization, provably identical output. The direct-counter probability t… |
+| 0040 | 2026-06-15 | @10d9e | 578552 | -120 (new record) | +16.36% | `e0ecc8f` | [0040](history/entries/0040--10d9e.md) | Adds a new model family: a nesting model that tracks the stack of currently-open… |
 
-**Current record: 578672** (@10d9e, entry 0037)
+**Current record: 578552** (@10d9e, entry 0040)
 
 Ledger updates are **CI-only** — see [`.github/workflows/scorekeeper.yml`](.github/workflows/scorekeeper.yml).
