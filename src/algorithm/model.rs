@@ -18,7 +18,7 @@ const MM_BASE: usize = 2 * NCTX;
 const NINPUT: usize = 2 * NCTX + 6;
 const TBITS: u32 = 23; // default per-model context-table size (2^TBITS slots)
 const MIXCTX: usize = 16384;
-const NL1: usize = 13; // number of layer-1 specialist mixers
+const NL1: usize = 14; // number of layer-1 specialist mixers
 const MIX3CTX: usize = 8192; // order-2 specialist rows
 const MIX4CTX: usize = 8192; // order-3 specialist rows
 const FBITS: u32 = 21; // indirect order-3/-4 follow-history hash table bits
@@ -297,6 +297,7 @@ impl Cm {
             Mixer::new(NINPUT, 4096, 12),
             Mixer::new(NINPUT, 512, 12),
             Mixer::new(NINPUT, 256, 12),
+            Mixer::new(NINPUT, 1024, 12),
         ];
         let l2 = Mixer::new(NL1, 256, 12);
         let l2b = Mixer::new(NL1, 256, 12);
@@ -1098,6 +1099,13 @@ impl Cm {
         // specialise on the order-2 indirect prediction (the byte that most
         // recently followed this 2-byte context).
         self.l2_in[12] = self.l1[12].mix(&self.mix_in, &self.squash, self.ind_pred as usize);
+        // nest-state selector: specialise on the enclosing bracket + nesting depth.
+        let nestsel = if self.nest_depth > 0 {
+            (self.nest_stack[self.nest_depth - 1] as usize) | ((self.nest_depth & 3) << 8)
+        } else {
+            0
+        };
+        self.l2_in[13] = self.l1[13].mix(&self.mix_in, &self.squash, nestsel);
         // Two layer-2 combiners over the layer-1 logits — one keyed on the last
         // byte, one on the within-byte bit position — averaged in the logit domain.
         let d2a = self.l2.mix(&self.l2_in, &self.squash, self.c1 as usize);
@@ -1188,6 +1196,7 @@ impl Cm {
         self.l1[10].update(bit, &self.mix_in);
         self.l1[11].update(bit, &self.mix_in);
         self.l1[12].update(bit, &self.mix_in);
+        self.l1[13].update(bit, &self.mix_in);
         self.l2.update(bit, &self.l2_in);
         self.l2b.update(bit, &self.l2_in);
         self.l2c.update(bit, &self.l2_in);
