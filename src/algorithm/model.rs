@@ -8,7 +8,7 @@
 
 use super::tables::{build, squash_d};
 
-const NCTX: usize = 75; // orders + word/n-gram + strided-sparse + gap bigrams + 2D byte-above (x2 rows) + record + text shape/layout
+const NCTX: usize = 79; // orders + word/n-gram + strided-sparse + gap bigrams + 2D + record + indirect(1-4) + text shape/layout
 // Mixer input layout:
 //   [0 .. NCTX)            direct adaptive counters
 //   [SM_BASE .. SM_BASE+NCTX) bit-history StateMap predictions (one per context)
@@ -23,6 +23,8 @@ const MIXCTX: usize = 16384;
 const NL1: usize = 12; // number of layer-1 specialist mixers
 const MIX3CTX: usize = 8192; // order-2 specialist rows
 const MIX4CTX: usize = 8192; // order-3 specialist rows
+const FBITS: u32 = 21; // indirect order-3/-4 follow-history hash table bits
+const FSIZE: usize = 1 << FBITS;
 const MMBITS: u32 = 25;
 const MMSIZE: usize = 1 << MMBITS;
 const MMBITS2: u32 = 26;
@@ -238,6 +240,10 @@ pub struct Cm {
     rlen: u32,        // current dominant recurrence period (record length)
     rcount: i32,      // confidence in rlen (Boyer-Moore majority vote)
     above_byte: u32,  // byte directly above (same column, previous line); 256 if none
+    follow1: Vec<u32>, // [256] packed recent bytes that followed each order-1 ctx
+    follow2: Vec<u32>, // [65536] packed recent bytes that followed each order-2 ctx
+    follow3: Vec<u32>, // [FSIZE] hashed: bytes that followed each order-3 ctx
+    follow4: Vec<u32>, // [FSIZE] hashed: bytes that followed each order-4 ctx
 }
 
 impl Cm {
@@ -361,6 +367,10 @@ impl Cm {
             rlen: 0,
             rcount: 0,
             above_byte: 256,
+            follow1: vec![0u32; 256],
+            follow2: vec![0u32; 65536],
+            follow3: vec![0u32; FSIZE],
+            follow4: vec![0u32; FSIZE],
         }
     }
 
@@ -837,6 +847,17 @@ impl Cm {
         } else {
             0
         };
+        // Indirect models: the current order-1 / order-2 context combined with
+        // the recent history of bytes that have followed it. Captures higher-order
+        // regularity ("what usually comes next here") that direct contexts miss.
+        let f1 = self.follow1[(c4 & 0xff) as usize];
+        self.ctxhash[75] = hashk(0x6900, (c4 & 0xff) ^ f1.wrapping_mul(0x9e37_79b1));
+        let f2 = self.follow2[(c4 & 0xffff) as usize];
+        self.ctxhash[76] = hashk(0x6A00, (c4 & 0xffff) ^ f2.wrapping_mul(0x85eb_ca6b));
+        let j3 = ((c4 & 0x00ff_ffff).wrapping_mul(0x9e37_79b1) >> (32 - FBITS)) as usize;
+        self.ctxhash[77] = hashk(0x6B00, (c4 & 0x00ff_ffff) ^ self.follow3[j3].wrapping_mul(0xc2b2_ae35));
+        let j4 = (c4.wrapping_mul(0x85eb_ca6b) >> (32 - FBITS)) as usize;
+        self.ctxhash[78] = hashk(0x6C00, c4 ^ self.follow4[j4].wrapping_mul(0x27d4_eb2f));
     }
 
     #[inline]
@@ -1129,6 +1150,16 @@ impl Cm {
                     self.matchlen5 = 0;
                 }
             }
+            // Indirect model: record that `byte` followed the order-1 / order-2
+            // context that preceded it (c4 still holds the pre-`byte` history).
+            let ic1 = (self.c4 & 0xff) as usize;
+            self.follow1[ic1] = (self.follow1[ic1] << 8) | byte as u32;
+            let ic2 = (self.c4 & 0xffff) as usize;
+            self.follow2[ic2] = (self.follow2[ic2] << 8) | byte as u32;
+            let ic3 = ((self.c4 & 0x00ff_ffff).wrapping_mul(0x9e37_79b1) >> (32 - FBITS)) as usize;
+            self.follow3[ic3] = (self.follow3[ic3] << 8) | byte as u32;
+            let ic4 = (self.c4.wrapping_mul(0x85eb_ca6b) >> (32 - FBITS)) as usize;
+            self.follow4[ic4] = (self.follow4[ic4] << 8) | byte as u32;
             let bp = (self.pos & self.bufmask) as usize;
             self.buf[bp] = byte;
             self.pos += 1;
