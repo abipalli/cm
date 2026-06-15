@@ -38,7 +38,8 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0031 | 2026-06-15 | @10d9e | 579415 | -1663 (new record) | +16.23% | `722ed67` | [0031](history/entries/0031--10d9e.md) | Adds a new model family: indirect context models. For each of the order-1..4 con… |
 | 0032 | 2026-06-15 | @10d9e | 579224 | -191 (new record) | +16.26% | `5f3154f` | [0032](history/entries/0032--10d9e.md) | Extends the 2D / byte-above model family with two more contexts that read the up… |
 | 0033 | 2026-06-15 | @10d9e | 579171 | -53 (new record) | +16.27% | `3a282e6` | [0033](history/entries/0033--10d9e.md) | Extends the indirect-model family to the word level: a hash table records the re… |
+| 0034 | 2026-06-15 | @10d9e | 579101 | -70 (new record) | +16.28% | `562dd16` | [0034](history/entries/0034--10d9e.md) | Adds a run-length context: the last byte combined with the length of its current… |
 
-**Current record: 579171** (@10d9e, entry 0033)
+**Current record: 579101** (@10d9e, entry 0034)
 
 Ledger updates are **CI-only** — see [`.github/workflows/scorekeeper.yml`](.github/workflows/scorekeeper.yml).
