@@ -25,17 +25,17 @@ const MIX3CTX: usize = 8192; // order-2 specialist rows
 const MIX4CTX: usize = 8192; // order-3 specialist rows
 const FBITS: u32 = 21; // indirect order-3/-4 follow-history hash table bits
 const FSIZE: usize = 1 << FBITS;
-const MMBITS: u32 = 25;
+const MMBITS: u32 = 23;
 const MMSIZE: usize = 1 << MMBITS;
-const MMBITS2: u32 = 26;
+const MMBITS2: u32 = 23;
 const MMSIZE2: usize = 1 << MMBITS2;
-const MMBITS3: u32 = 23;
+const MMBITS3: u32 = 22;
 const MMSIZE3: usize = 1 << MMBITS3;
-const MMBITS4: u32 = 24;
+const MMBITS4: u32 = 23;
 const MMSIZE4: usize = 1 << MMBITS4;
-const MMBITS5: u32 = 24;
+const MMBITS5: u32 = 23;
 const MMSIZE5: usize = 1 << MMBITS5;
-const MMBITS6: u32 = 24; // order-4 (short) match model
+const MMBITS6: u32 = 23; // order-4 (short) match model
 const MMSIZE6: usize = 1 << MMBITS6;
 const APM_S: usize = 33;
 const CNT_LIMIT: i32 = 254;
@@ -1141,7 +1141,7 @@ impl Cm {
         }
         if self.mm_used6 {
             let v = self.mm_sm6[self.mm_idx6] as i32;
-            self.mm_sm6[self.mm_idx6] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 6)) as u16;
+            self.mm_sm6[self.mm_idx6] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 5)) as u16;
         }
         self.l1[0].update(bit, &self.mix_in);
         self.l1[1].update(bit, &self.mix_in);
