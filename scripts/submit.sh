@@ -193,7 +193,15 @@ if [[ "$WAIT" == 0 ]]; then
 fi
 
 # ---- wait for Verify, then for Auto-merge to land it ---------------------
-info "waiting for Verify CI on PR #$PR"
+# gh pr checks --watch exits immediately with "no checks reported" if the
+# workflow has not registered yet, so first poll until a check appears.
+info "waiting for Verify CI to start on PR #$PR"
+checks_deadline=$(( $(date +%s) + 120 ))
+until gh pr checks "$PR" >/dev/null 2>&1; do
+  [[ "$(date +%s)" -gt "$checks_deadline" ]] && die "no CI checks appeared for PR #$PR after 2m"
+  sleep 5
+done
+info "watching Verify CI on PR #$PR"
 if ! gh pr checks "$PR" --watch --fail-fast; then
   echo
   echo "Verify failed. Recent logs:" >&2
