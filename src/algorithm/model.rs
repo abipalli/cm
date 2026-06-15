@@ -9,7 +9,13 @@
 use super::tables::{build, squash_d};
 
 const NCTX: usize = 17; // context models: orders 0..9 + word + sparse + text shape/layout
-const NINPUT: usize = NCTX + 5; // + five match models (order-6, order-8, order-10, order-12, order-14)
+// Mixer input layout:
+//   [0 .. NCTX)            direct adaptive counters
+//   [SM_BASE .. SM_BASE+NCTX) bit-history StateMap predictions (one per context)
+//   [MM_BASE .. MM_BASE+5)  five match models (order-6, -8, -10, -12, -14)
+const SM_BASE: usize = NCTX;
+const MM_BASE: usize = 2 * NCTX;
+const NINPUT: usize = 2 * NCTX + 5;
 const TBITS: u32 = 22;
 const TSIZE: usize = 1 << TBITS;
 const TMASK: u32 = (TSIZE as u32) - 1;
@@ -31,6 +37,27 @@ const RATE_FLOOR: i32 = 24;
 #[inline]
 fn hashk(h: u32, x: u32) -> u32 {
     h.wrapping_add(x).wrapping_add(1).wrapping_mul(2654435761)
+}
+
+/// Nonstationary bit-history state transition. The state byte packs two bounded
+/// counts (n0 in the high nibble, n1 in the low nibble, each 0..15). On each
+/// observed bit the matching count is incremented and the opposite count is
+/// discounted toward 2, which emphasises recent statistics — the classic
+/// recency bias that lets the StateMap track nonstationary / repetitive data.
+#[inline]
+fn next_state(s: u8, bit: i32) -> u8 {
+    let mut n0 = (s >> 4) as i32;
+    let mut n1 = (s & 15) as i32;
+    if bit != 0 {
+        n1 += 1;
+        if n0 > 2 { n0 = 2 + ((n0 - 2) >> 1); }
+    } else {
+        n0 += 1;
+        if n1 > 2 { n1 = 2 + ((n1 - 2) >> 1); }
+    }
+    if n0 > 15 { n0 = 15; }
+    if n1 > 15 { n1 = 15; }
+    ((n0 << 4) | n1) as u8
 }
 
 struct Apm {
@@ -78,6 +105,9 @@ pub struct Cm {
     squash: Vec<i32>,
     cp: Vec<Vec<u16>>, // [NCTX][TSIZE] probabilities 0..4095
     cn: Vec<Vec<u8>>,  // [NCTX][TSIZE] observation counts
+    st: Vec<Vec<u8>>,  // [NCTX][TSIZE] bit-history state per context slot
+    sm: Vec<Vec<u32>>, // [NCTX][256*8] StateMap: (state | bitpos<<8) -> (prob22<<10 | count)
+    sm_idx: [usize; NCTX],
     rate_tab: [i32; 256],
     ctxhash: [u32; NCTX],
     idx: [usize; NCTX],
@@ -143,6 +173,8 @@ impl Cm {
         }
         let cp = (0..NCTX).map(|_| vec![2048u16; TSIZE]).collect();
         let cn = (0..NCTX).map(|_| vec![0u8; TSIZE]).collect();
+        let st = (0..NCTX).map(|_| vec![0u8; TSIZE]).collect();
+        let sm = (0..NCTX).map(|_| vec![1u32 << 31; 256 * 8]).collect();
         let w = vec![(1 << 16) / NINPUT as i32; MIXCTX * NINPUT];
 
         let mut bufsize: u32 = 1;
@@ -159,6 +191,9 @@ impl Cm {
             squash,
             cp,
             cn,
+            st,
+            sm,
+            sm_idx: [0; NCTX],
             rate_tab,
             ctxhash: [0; NCTX],
             idx: [0; NCTX],
@@ -343,72 +378,76 @@ impl Cm {
             let ix = (self.ctxhash[i].wrapping_mul(769).wrapping_add(self.c0 as u32) & TMASK) as usize;
             self.idx[i] = ix;
             self.mix_in[i] = self.stretch[self.cp[i][ix] as usize];
+            let mi = (self.st[i][ix] as usize) | ((self.bitcount as usize) << 8);
+            self.sm_idx[i] = mi;
+            let smp = (self.sm[i][mi] >> 20) as usize;
+            self.mix_in[SM_BASE + i] = self.stretch[smp];
         }
         self.mm_used = false;
-        self.mix_in[NCTX] = 0;
+        self.mix_in[MM_BASE] = 0;
         if self.matchlen > 0 && self.predicted_byte >= 0 {
             let sofar = self.c0 - (1 << self.bitcount);
             if sofar == (self.predicted_byte >> (8 - self.bitcount)) {
                 let expected_bit = (self.predicted_byte >> (7 - self.bitcount)) & 1;
                 let li = if self.matchlen > 32 { 32 } else { self.matchlen };
                 self.mm_idx = ((li << 1) | expected_bit) as usize;
-                self.mix_in[NCTX] = self.stretch[self.mm_sm[self.mm_idx] as usize];
+                self.mix_in[MM_BASE] = self.stretch[self.mm_sm[self.mm_idx] as usize];
                 self.mm_used = true;
             } else {
                 self.matchlen = 0;
             }
         }
         self.mm_used2 = false;
-        self.mix_in[NCTX + 1] = 0;
+        self.mix_in[MM_BASE + 1] = 0;
         if self.matchlen2 > 0 && self.predicted_byte2 >= 0 {
             let sofar = self.c0 - (1 << self.bitcount);
             if sofar == (self.predicted_byte2 >> (8 - self.bitcount)) {
                 let expected_bit = (self.predicted_byte2 >> (7 - self.bitcount)) & 1;
                 let li = if self.matchlen2 > 32 { 32 } else { self.matchlen2 };
                 self.mm_idx2 = ((li << 1) | expected_bit) as usize;
-                self.mix_in[NCTX + 1] = self.stretch[self.mm_sm2[self.mm_idx2] as usize];
+                self.mix_in[MM_BASE + 1] = self.stretch[self.mm_sm2[self.mm_idx2] as usize];
                 self.mm_used2 = true;
             } else {
                 self.matchlen2 = 0;
             }
         }
         self.mm_used3 = false;
-        self.mix_in[NCTX + 2] = 0;
+        self.mix_in[MM_BASE + 2] = 0;
         if self.matchlen3 > 0 && self.predicted_byte3 >= 0 {
             let sofar = self.c0 - (1 << self.bitcount);
             if sofar == (self.predicted_byte3 >> (8 - self.bitcount)) {
                 let expected_bit = (self.predicted_byte3 >> (7 - self.bitcount)) & 1;
                 let li = if self.matchlen3 > 84 { 84 } else { self.matchlen3 };
                 self.mm_idx3 = ((li << 1) | expected_bit) as usize;
-                self.mix_in[NCTX + 2] = self.stretch[self.mm_sm3[self.mm_idx3] as usize];
+                self.mix_in[MM_BASE + 2] = self.stretch[self.mm_sm3[self.mm_idx3] as usize];
                 self.mm_used3 = true;
             } else {
                 self.matchlen3 = 0;
             }
         }
         self.mm_used4 = false;
-        self.mix_in[NCTX + 3] = 0;
+        self.mix_in[MM_BASE + 3] = 0;
         if self.matchlen4 > 0 && self.predicted_byte4 >= 0 {
             let sofar = self.c0 - (1 << self.bitcount);
             if sofar == (self.predicted_byte4 >> (8 - self.bitcount)) {
                 let expected_bit = (self.predicted_byte4 >> (7 - self.bitcount)) & 1;
                 let li = if self.matchlen4 > 72 { 72 } else { self.matchlen4 };
                 self.mm_idx4 = ((li << 1) | expected_bit) as usize;
-                self.mix_in[NCTX + 3] = self.stretch[self.mm_sm4[self.mm_idx4] as usize];
+                self.mix_in[MM_BASE + 3] = self.stretch[self.mm_sm4[self.mm_idx4] as usize];
                 self.mm_used4 = true;
             } else {
                 self.matchlen4 = 0;
             }
         }
         self.mm_used5 = false;
-        self.mix_in[NCTX + 4] = 0;
+        self.mix_in[MM_BASE + 4] = 0;
         if self.matchlen5 > 0 && self.predicted_byte5 >= 0 {
             let sofar = self.c0 - (1 << self.bitcount);
             if sofar == (self.predicted_byte5 >> (8 - self.bitcount)) {
                 let expected_bit = (self.predicted_byte5 >> (7 - self.bitcount)) & 1;
                 let li = if self.matchlen5 > 72 { 72 } else { self.matchlen5 };
                 self.mm_idx5 = ((li << 1) | expected_bit) as usize;
-                self.mix_in[NCTX + 4] = self.stretch[self.mm_sm5[self.mm_idx5] as usize];
+                self.mix_in[MM_BASE + 4] = self.stretch[self.mm_sm5[self.mm_idx5] as usize];
                 self.mm_used5 = true;
             } else {
                 self.matchlen5 = 0;
@@ -485,6 +524,17 @@ impl Cm {
             if n < CNT_LIMIT {
                 self.cn[i][ix] = (n + 1) as u8;
             }
+            // StateMap: adapt prob for the observed bit-history state, then
+            // advance that state. prob is 22-bit fixed point in the high bits,
+            // an adaptation count (capped at 255) in the low 10 bits.
+            let s = self.sm_idx[i];
+            let entry = self.sm[i][s];
+            let cnt = (entry & 1023) as i32;
+            let p22 = (entry >> 10) as i32;
+            let newp = p22 + (((bit << 22) - p22) / (cnt + 2));
+            let newcnt = if cnt < 255 { cnt + 1 } else { 255 };
+            self.sm[i][s] = ((newp as u32) << 10) | (newcnt as u32);
+            self.st[i][ix] = next_state(s as u8, bit);
         }
         self.c0 = (self.c0 << 1) | bit;
         self.bitcount += 1;
