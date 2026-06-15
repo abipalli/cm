@@ -15,7 +15,8 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0008 | 2026-06-15 | @10d9e | 606779 | -3732 (new record) | +12.27% | `03e1d79` | [0008](history/entries/0008--10d9e.md) | Extends the context-model bank from 17 to 23 models — all general-purpose, no … |
 | 0009 | 2026-06-15 | @10d9e | 605962 | -817 (new record) | +12.40% | `8a1b5e6` | [0009](history/entries/0009--10d9e.md) | Adds word-level n-gram context models, targeting natural-language text where the… |
 | 0010 | 2026-06-15 | @10d9e | 595819 | -10143 (new record) | +13.86% | `defe1d9` | [0010](history/entries/0010--10d9e.md) | Replaces the single context-selected logistic mixer with a two-layer mixing netw… |
+| 0011 | 2026-06-15 | @10d9e | 594283 | -1536 (new record) | +14.08% | `c3774ba` | [0011](history/entries/0011--10d9e.md) | Adds a third APM/SSE calibration stage after the existing two, keyed on a *dense… |
 
-**Current record: 595819** (@10d9e, entry 0010)
+**Current record: 594283** (@10d9e, entry 0011)
 
 Ledger updates are **CI-only** — see [`.github/workflows/scorekeeper.yml`](.github/workflows/scorekeeper.yml).
