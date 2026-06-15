@@ -15,7 +15,7 @@ const NCTX: usize = 83; // orders + word/n-gram + strided-sparse + gap bigrams +
 //   [MM_BASE .. MM_BASE+5)  five match models (order-6, -8, -10, -12, -14)
 const SM_BASE: usize = NCTX;
 const MM_BASE: usize = 2 * NCTX;
-const NINPUT: usize = 2 * NCTX + 5;
+const NINPUT: usize = 2 * NCTX + 6;
 const TBITS: u32 = 23;
 const TSIZE: usize = 1 << TBITS;
 const TMASK: u32 = (TSIZE as u32) - 1;
@@ -35,6 +35,8 @@ const MMBITS4: u32 = 24;
 const MMSIZE4: usize = 1 << MMBITS4;
 const MMBITS5: u32 = 24;
 const MMSIZE5: usize = 1 << MMBITS5;
+const MMBITS6: u32 = 24; // order-4 (short) match model
+const MMSIZE6: usize = 1 << MMBITS6;
 const APM_S: usize = 33;
 const CNT_LIMIT: i32 = 254;
 const RATE_FLOOR: i32 = 40;
@@ -220,6 +222,13 @@ pub struct Cm {
     mm_sm5: [u16; 160],
     mm_used5: bool,
     mm_idx5: usize,
+    mmtab6: Vec<u32>,
+    matchptr6: u32,
+    matchlen6: i32,
+    predicted_byte6: i32,
+    mm_sm6: [u16; 80],
+    mm_used6: bool,
+    mm_idx6: usize,
     apm1: Apm,
     apm2: Apm,
     apm3: Apm,
@@ -351,6 +360,13 @@ impl Cm {
             mm_sm5: [2048; 160],
             mm_used5: false,
             mm_idx5: 0,
+            mmtab6: vec![0u32; MMSIZE6],
+            matchptr6: 0,
+            matchlen6: 0,
+            predicted_byte6: -1,
+            mm_sm6: [2048; 80],
+            mm_used6: false,
+            mm_idx6: 0,
             apm1,
             apm2,
             apm3,
@@ -978,6 +994,20 @@ impl Cm {
                 self.matchlen5 = 0;
             }
         }
+        self.mm_used6 = false;
+        self.mix_in[MM_BASE + 5] = 0;
+        if self.matchlen6 > 0 && self.predicted_byte6 >= 0 {
+            let sofar = self.c0 - (1 << self.bitcount);
+            if sofar == (self.predicted_byte6 >> (8 - self.bitcount)) {
+                let expected_bit = (self.predicted_byte6 >> (7 - self.bitcount)) & 1;
+                let li = if self.matchlen6 > 32 { 32 } else { self.matchlen6 };
+                self.mm_idx6 = ((li << 1) | expected_bit) as usize;
+                self.mix_in[MM_BASE + 5] = self.stretch[self.mm_sm6[self.mm_idx6] as usize];
+                self.mm_used6 = true;
+            } else {
+                self.matchlen6 = 0;
+            }
+        }
         // Layer-1 specialist mixers, each selected by a different context:
         //   m0 — the proven last-byte + match-activity context (full resolution)
         //   m1 — the within-byte partial-byte context (order-0 bit position)
@@ -1109,6 +1139,10 @@ impl Cm {
             let v = self.mm_sm5[self.mm_idx5] as i32;
             self.mm_sm5[self.mm_idx5] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 5)) as u16;
         }
+        if self.mm_used6 {
+            let v = self.mm_sm6[self.mm_idx6] as i32;
+            self.mm_sm6[self.mm_idx6] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 6)) as u16;
+        }
         self.l1[0].update(bit, &self.mix_in);
         self.l1[1].update(bit, &self.mix_in);
         self.l1[2].update(bit, &self.mix_in);
@@ -1189,6 +1223,14 @@ impl Cm {
                     if self.matchlen5 < 0x3ff { self.matchlen5 += 1; }
                 } else {
                     self.matchlen5 = 0;
+                }
+            }
+            if self.matchlen6 > 0 {
+                if (self.predicted_byte6 & 0xff) as u8 == byte {
+                    self.matchptr6 += 1;
+                    if self.matchlen6 < 0x3ff { self.matchlen6 += 1; }
+                } else {
+                    self.matchlen6 = 0;
                 }
             }
             // Indirect model: record that `byte` followed the order-1 / order-2
@@ -1372,6 +1414,25 @@ impl Cm {
                     self.matchlen5 = if l >= 14 { l } else { 0 };
                 }
             }
+            // order-4 (short) match model: anchored on just the last 4 bytes,
+            // catches short repeated tokens that the order-6+ models miss.
+            if self.pos >= 4 {
+                let h6 = (self.c4.wrapping_mul(2654435761)) >> (32 - MMBITS6);
+                let cand = self.mmtab6[h6 as usize];
+                self.mmtab6[h6 as usize] = self.pos;
+                if self.matchlen6 == 0 && cand > 0 && cand < self.pos {
+                    self.matchptr6 = cand;
+                    let mut l: i32 = 0;
+                    while l < 0x3ff
+                        && cand > l as u32
+                        && self.pos > (l as u32 + 1)
+                        && self.b(cand - 1 - l as u32) == self.b(self.pos - 1 - l as u32)
+                    {
+                        l += 1;
+                    }
+                    self.matchlen6 = if l >= 4 { l } else { 0 };
+                }
+            }
             self.predicted_byte = if self.matchlen > 0 && self.matchptr < self.pos {
                 self.b(self.matchptr) as i32
             } else {
@@ -1394,6 +1455,11 @@ impl Cm {
             };
             self.predicted_byte5 = if self.matchlen5 > 0 && self.matchptr5 < self.pos {
                 self.b(self.matchptr5) as i32
+            } else {
+                -1
+            };
+            self.predicted_byte6 = if self.matchlen6 > 0 && self.matchptr6 < self.pos {
+                self.b(self.matchptr6) as i32
             } else {
                 -1
             };
