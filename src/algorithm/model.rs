@@ -9,15 +9,21 @@
 use super::tables::{build, squash_d};
 
 const NCTX: usize = 12; // context models: orders 0..9 + word + sparse
-const NINPUT: usize = NCTX + 2; // + two match models (order-6 and order-8)
+const NINPUT: usize = NCTX + 5; // + five match models (order-6, order-8, order-10, order-12, order-14)
 const TBITS: u32 = 22;
 const TSIZE: usize = 1 << TBITS;
 const TMASK: u32 = (TSIZE as u32) - 1;
-const MIXCTX: usize = 1024;
-const MMBITS: u32 = 22;
+const MIXCTX: usize = 16384;
+const MMBITS: u32 = 25;
 const MMSIZE: usize = 1 << MMBITS;
-const MMBITS2: u32 = 22;
+const MMBITS2: u32 = 25;
 const MMSIZE2: usize = 1 << MMBITS2;
+const MMBITS3: u32 = 23;
+const MMSIZE3: usize = 1 << MMBITS3;
+const MMBITS4: u32 = 23;
+const MMSIZE4: usize = 1 << MMBITS4;
+const MMBITS5: u32 = 24;
+const MMSIZE5: usize = 1 << MMBITS5;
 const APM_S: usize = 33;
 const CNT_LIMIT: i32 = 254;
 const RATE_FLOOR: i32 = 24;
@@ -95,6 +101,27 @@ pub struct Cm {
     mm_sm2: [u16; 80],
     mm_used2: bool,
     mm_idx2: usize,
+    mmtab3: Vec<u32>,
+    matchptr3: u32,
+    matchlen3: i32,
+    predicted_byte3: i32,
+    mm_sm3: [u16; 184],
+    mm_used3: bool,
+    mm_idx3: usize,
+    mmtab4: Vec<u32>,
+    matchptr4: u32,
+    matchlen4: i32,
+    predicted_byte4: i32,
+    mm_sm4: [u16; 160],
+    mm_used4: bool,
+    mm_idx4: usize,
+    mmtab5: Vec<u32>,
+    matchptr5: u32,
+    matchlen5: i32,
+    predicted_byte5: i32,
+    mm_sm5: [u16; 160],
+    mm_used5: bool,
+    mm_idx5: usize,
     apm1: Apm,
     apm2: Apm,
     c0: i32,
@@ -154,6 +181,27 @@ impl Cm {
             mm_sm2: [2048; 80],
             mm_used2: false,
             mm_idx2: 0,
+            mmtab3: vec![0u32; MMSIZE3],
+            matchptr3: 0,
+            matchlen3: 0,
+            predicted_byte3: -1,
+            mm_sm3: [2048; 184],
+            mm_used3: false,
+            mm_idx3: 0,
+            mmtab4: vec![0u32; MMSIZE4],
+            matchptr4: 0,
+            matchlen4: 0,
+            predicted_byte4: -1,
+            mm_sm4: [2048; 160],
+            mm_used4: false,
+            mm_idx4: 0,
+            mmtab5: vec![0u32; MMSIZE5],
+            matchptr5: 0,
+            matchlen5: 0,
+            predicted_byte5: -1,
+            mm_sm5: [2048; 160],
+            mm_used5: false,
+            mm_idx5: 0,
             apm1,
             apm2,
             c0: 1,
@@ -262,7 +310,53 @@ impl Cm {
                 self.matchlen2 = 0;
             }
         }
-        self.mixsel = (((if self.matchlen2 > 0 { 1 } else { 0 }) << 9)
+        self.mm_used3 = false;
+        self.mix_in[NCTX + 2] = 0;
+        if self.matchlen3 > 0 && self.predicted_byte3 >= 0 {
+            let sofar = self.c0 - (1 << self.bitcount);
+            if sofar == (self.predicted_byte3 >> (8 - self.bitcount)) {
+                let expected_bit = (self.predicted_byte3 >> (7 - self.bitcount)) & 1;
+                let li = if self.matchlen3 > 84 { 84 } else { self.matchlen3 };
+                self.mm_idx3 = ((li << 1) | expected_bit) as usize;
+                self.mix_in[NCTX + 2] = self.stretch[self.mm_sm3[self.mm_idx3] as usize];
+                self.mm_used3 = true;
+            } else {
+                self.matchlen3 = 0;
+            }
+        }
+        self.mm_used4 = false;
+        self.mix_in[NCTX + 3] = 0;
+        if self.matchlen4 > 0 && self.predicted_byte4 >= 0 {
+            let sofar = self.c0 - (1 << self.bitcount);
+            if sofar == (self.predicted_byte4 >> (8 - self.bitcount)) {
+                let expected_bit = (self.predicted_byte4 >> (7 - self.bitcount)) & 1;
+                let li = if self.matchlen4 > 72 { 72 } else { self.matchlen4 };
+                self.mm_idx4 = ((li << 1) | expected_bit) as usize;
+                self.mix_in[NCTX + 3] = self.stretch[self.mm_sm4[self.mm_idx4] as usize];
+                self.mm_used4 = true;
+            } else {
+                self.matchlen4 = 0;
+            }
+        }
+        self.mm_used5 = false;
+        self.mix_in[NCTX + 4] = 0;
+        if self.matchlen5 > 0 && self.predicted_byte5 >= 0 {
+            let sofar = self.c0 - (1 << self.bitcount);
+            if sofar == (self.predicted_byte5 >> (8 - self.bitcount)) {
+                let expected_bit = (self.predicted_byte5 >> (7 - self.bitcount)) & 1;
+                let li = if self.matchlen5 > 72 { 72 } else { self.matchlen5 };
+                self.mm_idx5 = ((li << 1) | expected_bit) as usize;
+                self.mix_in[NCTX + 4] = self.stretch[self.mm_sm5[self.mm_idx5] as usize];
+                self.mm_used5 = true;
+            } else {
+                self.matchlen5 = 0;
+            }
+        }
+        self.mixsel = (((if self.matchlen4 > 0 { 1 } else { 0 }) << 13)
+            | ((if self.matchlen3 > 72 { 1 } else { 0 }) << 12)
+            | ((if self.matchlen3 > 52 { 1 } else { 0 }) << 11)
+            | ((if self.matchlen3 > 0 { 1 } else { 0 }) << 10)
+            | ((if self.matchlen2 > 0 { 1 } else { 0 }) << 9)
             | ((if self.matchlen > 0 { 1 } else { 0 }) << 8)
             | self.c1) as usize
             & (MIXCTX - 1);
@@ -303,6 +397,18 @@ impl Cm {
             let v = self.mm_sm2[self.mm_idx2] as i32;
             self.mm_sm2[self.mm_idx2] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 6)) as u16;
         }
+        if self.mm_used3 {
+            let v = self.mm_sm3[self.mm_idx3] as i32;
+            self.mm_sm3[self.mm_idx3] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 5)) as u16;
+        }
+        if self.mm_used4 {
+            let v = self.mm_sm4[self.mm_idx4] as i32;
+            self.mm_sm4[self.mm_idx4] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 1)) as u16;
+        }
+        if self.mm_used5 {
+            let v = self.mm_sm5[self.mm_idx5] as i32;
+            self.mm_sm5[self.mm_idx5] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 5)) as u16;
+        }
         let err = (bit << 12) - p;
         let base = self.mixsel * NINPUT;
         for i in 0..NINPUT {
@@ -336,6 +442,30 @@ impl Cm {
                     if self.matchlen2 < 0x3ff { self.matchlen2 += 1; }
                 } else {
                     self.matchlen2 = 0;
+                }
+            }
+            if self.matchlen3 > 0 {
+                if (self.predicted_byte3 & 0xff) as u8 == byte {
+                    self.matchptr3 += 1;
+                    if self.matchlen3 < 0x3ff { self.matchlen3 += 1; }
+                } else {
+                    self.matchlen3 = 0;
+                }
+            }
+            if self.matchlen4 > 0 {
+                if (self.predicted_byte4 & 0xff) as u8 == byte {
+                    self.matchptr4 += 1;
+                    if self.matchlen4 < 0x3ff { self.matchlen4 += 1; }
+                } else {
+                    self.matchlen4 = 0;
+                }
+            }
+            if self.matchlen5 > 0 {
+                if (self.predicted_byte5 & 0xff) as u8 == byte {
+                    self.matchptr5 += 1;
+                    if self.matchlen5 < 0x3ff { self.matchlen5 += 1; }
+                } else {
+                    self.matchlen5 = 0;
                 }
             }
             let bp = (self.pos & self.bufmask) as usize;
@@ -393,6 +523,84 @@ impl Cm {
                     self.matchlen2 = if l >= 8 { l } else { 0 };
                 }
             }
+            if self.pos >= 10 {
+                let h3 = (self.c4.wrapping_mul(2654435761)
+                    .wrapping_add((self.b(self.pos - 5) as u32).wrapping_mul(0x85eb_ca6b))
+                    .wrapping_add((self.b(self.pos - 6) as u32).wrapping_mul(0xc2b2_ae35))
+                    .wrapping_add((self.b(self.pos - 7) as u32).wrapping_mul(0x27d4_eb2f))
+                    .wrapping_add((self.b(self.pos - 8) as u32).wrapping_mul(0x1656_67b1))
+                    .wrapping_add((self.b(self.pos - 9) as u32).wrapping_mul(0xff51_afd7))
+                    .wrapping_add((self.b(self.pos - 10) as u32).wrapping_mul(0xc4ce_b9fe)))
+                    >> (32 - MMBITS3);
+                let cand = self.mmtab3[h3 as usize];
+                self.mmtab3[h3 as usize] = self.pos;
+                if self.matchlen3 == 0 && cand > 0 && cand < self.pos {
+                    self.matchptr3 = cand;
+                    let mut l: i32 = 0;
+                    while l < 0x3ff
+                        && cand > l as u32
+                        && self.pos > (l as u32 + 1)
+                        && self.b(cand - 1 - l as u32) == self.b(self.pos - 1 - l as u32)
+                    {
+                        l += 1;
+                    }
+                    self.matchlen3 = if l >= 10 { l } else { 0 };
+                }
+            }
+            if self.pos >= 12 {
+                let h4 = (self.c4.wrapping_mul(2654435761)
+                    .wrapping_add((self.b(self.pos - 5) as u32).wrapping_mul(0x85eb_ca6b))
+                    .wrapping_add((self.b(self.pos - 6) as u32).wrapping_mul(0xc2b2_ae35))
+                    .wrapping_add((self.b(self.pos - 7) as u32).wrapping_mul(0x27d4_eb2f))
+                    .wrapping_add((self.b(self.pos - 8) as u32).wrapping_mul(0x1656_67b1))
+                    .wrapping_add((self.b(self.pos - 9) as u32).wrapping_mul(0xff51_afd7))
+                    .wrapping_add((self.b(self.pos - 10) as u32).wrapping_mul(0xc4ce_b9fe))
+                    .wrapping_add((self.b(self.pos - 11) as u32).wrapping_mul(0x52dc_e729))
+                    .wrapping_add((self.b(self.pos - 12) as u32).wrapping_mul(0x9e37_79b9)))
+                    >> (32 - MMBITS4);
+                let cand = self.mmtab4[h4 as usize];
+                self.mmtab4[h4 as usize] = self.pos;
+                if self.matchlen4 == 0 && cand > 0 && cand < self.pos {
+                    self.matchptr4 = cand;
+                    let mut l: i32 = 0;
+                    while l < 0x3ff
+                        && cand > l as u32
+                        && self.pos > (l as u32 + 1)
+                        && self.b(cand - 1 - l as u32) == self.b(self.pos - 1 - l as u32)
+                    {
+                        l += 1;
+                    }
+                    self.matchlen4 = if l >= 12 { l } else { 0 };
+                }
+            }
+            if self.pos >= 14 {
+                let h5 = (self.c4.wrapping_mul(2654435761)
+                    .wrapping_add((self.b(self.pos - 5) as u32).wrapping_mul(0x85eb_ca6b))
+                    .wrapping_add((self.b(self.pos - 6) as u32).wrapping_mul(0xc2b2_ae35))
+                    .wrapping_add((self.b(self.pos - 7) as u32).wrapping_mul(0x27d4_eb2f))
+                    .wrapping_add((self.b(self.pos - 8) as u32).wrapping_mul(0x1656_67b1))
+                    .wrapping_add((self.b(self.pos - 9) as u32).wrapping_mul(0xff51_afd7))
+                    .wrapping_add((self.b(self.pos - 10) as u32).wrapping_mul(0xc4ce_b9fe))
+                    .wrapping_add((self.b(self.pos - 11) as u32).wrapping_mul(0x52dc_e729))
+                    .wrapping_add((self.b(self.pos - 12) as u32).wrapping_mul(0x9e37_79b9))
+                    .wrapping_add((self.b(self.pos - 13) as u32).wrapping_mul(0x7f4a_7c15))
+                    .wrapping_add((self.b(self.pos - 14) as u32).wrapping_mul(0x94d0_49bb)))
+                    >> (32 - MMBITS5);
+                let cand = self.mmtab5[h5 as usize];
+                self.mmtab5[h5 as usize] = self.pos;
+                if self.matchlen5 == 0 && cand > 0 && cand < self.pos {
+                    self.matchptr5 = cand;
+                    let mut l: i32 = 0;
+                    while l < 0x3ff
+                        && cand > l as u32
+                        && self.pos > (l as u32 + 1)
+                        && self.b(cand - 1 - l as u32) == self.b(self.pos - 1 - l as u32)
+                    {
+                        l += 1;
+                    }
+                    self.matchlen5 = if l >= 14 { l } else { 0 };
+                }
+            }
             self.predicted_byte = if self.matchlen > 0 && self.matchptr < self.pos {
                 self.b(self.matchptr) as i32
             } else {
@@ -400,6 +608,21 @@ impl Cm {
             };
             self.predicted_byte2 = if self.matchlen2 > 0 && self.matchptr2 < self.pos {
                 self.b(self.matchptr2) as i32
+            } else {
+                -1
+            };
+            self.predicted_byte3 = if self.matchlen3 > 0 && self.matchptr3 < self.pos {
+                self.b(self.matchptr3) as i32
+            } else {
+                -1
+            };
+            self.predicted_byte4 = if self.matchlen4 > 0 && self.matchptr4 < self.pos {
+                self.b(self.matchptr4) as i32
+            } else {
+                -1
+            };
+            self.predicted_byte5 = if self.matchlen5 > 0 && self.matchptr5 < self.pos {
+                self.b(self.matchptr5) as i32
             } else {
                 -1
             };
