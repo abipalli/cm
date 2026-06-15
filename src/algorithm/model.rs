@@ -249,8 +249,8 @@ impl Cm {
             Mixer::new(NINPUT, MIX3CTX, 14),
             Mixer::new(NINPUT, MIX4CTX, 14),
         ];
-        let l2 = Mixer::new(NL1, 256, 4);
-        let l2b = Mixer::new(NL1, 256, 4);
+        let l2 = Mixer::new(NL1, 256, 12);
+        let l2b = Mixer::new(NL1, 256, 12);
 
         let mut bufsize: u32 = 1;
         while (bufsize as usize) < expected_len + 16 && bufsize < (1 << 27) {
