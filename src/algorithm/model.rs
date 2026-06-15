@@ -8,7 +8,7 @@
 
 use super::tables::{build, squash_d};
 
-const NCTX: usize = 79; // orders + word/n-gram + strided-sparse + gap bigrams + 2D + record + indirect(1-4) + text shape/layout
+const NCTX: usize = 81; // orders + word/n-gram + strided-sparse + gap bigrams + 2D (rich) + record + indirect + text shape/layout
 // Mixer input layout:
 //   [0 .. NCTX)            direct adaptive counters
 //   [SM_BASE .. SM_BASE+NCTX) bit-history StateMap predictions (one per context)
@@ -20,7 +20,7 @@ const TBITS: u32 = 23;
 const TSIZE: usize = 1 << TBITS;
 const TMASK: u32 = (TSIZE as u32) - 1;
 const MIXCTX: usize = 16384;
-const NL1: usize = 12; // number of layer-1 specialist mixers
+const NL1: usize = 13; // number of layer-1 specialist mixers
 const MIX3CTX: usize = 8192; // order-2 specialist rows
 const MIX4CTX: usize = 8192; // order-3 specialist rows
 const FBITS: u32 = 21; // indirect order-3/-4 follow-history hash table bits
@@ -240,6 +240,7 @@ pub struct Cm {
     rlen: u32,        // current dominant recurrence period (record length)
     rcount: i32,      // confidence in rlen (Boyer-Moore majority vote)
     above_byte: u32,  // byte directly above (same column, previous line); 256 if none
+    ind_pred: u32,    // most recent byte that followed the current order-2 context
     follow1: Vec<u32>, // [256] packed recent bytes that followed each order-1 ctx
     follow2: Vec<u32>, // [65536] packed recent bytes that followed each order-2 ctx
     follow3: Vec<u32>, // [FSIZE] hashed: bytes that followed each order-3 ctx
@@ -272,6 +273,7 @@ impl Cm {
             Mixer::new(NINPUT, 4096, 12),
             Mixer::new(NINPUT, 4096, 12),
             Mixer::new(NINPUT, 512, 12),
+            Mixer::new(NINPUT, 256, 12),
         ];
         let l2 = Mixer::new(NL1, 256, 12);
         let l2b = Mixer::new(NL1, 256, 12);
@@ -367,6 +369,7 @@ impl Cm {
             rlen: 0,
             rcount: 0,
             above_byte: 256,
+            ind_pred: 0,
             follow1: vec![0u32; 256],
             follow2: vec![0u32; 65536],
             follow3: vec![0u32; FSIZE],
@@ -830,6 +833,25 @@ impl Cm {
         } else {
             0
         };
+        // upper-forward: byte above + the byte above-right (the char that came
+        // next on the previous line) — strong when the current line copies it.
+        self.ctxhash[79] = if have_above && above_pos + 1 < self.line_start {
+            let above_r = self.b(above_pos + 1) as u32;
+            hashk(0x6D00, above | (above_r << 8))
+        } else {
+            0
+        };
+        // 3-wide horizontal window from the previous line (above-left/above/right)
+        self.ctxhash[80] = if have_above
+            && above_pos > self.prev_line_start
+            && above_pos + 1 < self.line_start
+        {
+            let al = self.b(above_pos - 1) as u32;
+            let ar = self.b(above_pos + 1) as u32;
+            hashk(0x6E00, above ^ (al << 8) ^ (ar << 16))
+        } else {
+            0
+        };
         // Record model: the byte one detected-period back (the "byte above" for
         // newline-free periodic data such as executables and tables).
         let r = self.rlen;
@@ -854,6 +876,7 @@ impl Cm {
         self.ctxhash[75] = hashk(0x6900, (c4 & 0xff) ^ f1.wrapping_mul(0x9e37_79b1));
         let f2 = self.follow2[(c4 & 0xffff) as usize];
         self.ctxhash[76] = hashk(0x6A00, (c4 & 0xffff) ^ f2.wrapping_mul(0x85eb_ca6b));
+        self.ind_pred = f2 & 0xff;
         let j3 = ((c4 & 0x00ff_ffff).wrapping_mul(0x9e37_79b1) >> (32 - FBITS)) as usize;
         self.ctxhash[77] = hashk(0x6B00, (c4 & 0x00ff_ffff) ^ self.follow3[j3].wrapping_mul(0xc2b2_ae35));
         let j4 = (c4.wrapping_mul(0x85eb_ca6b) >> (32 - FBITS)) as usize;
@@ -996,6 +1019,9 @@ impl Cm {
         // byte-above selector (2D structure): specialise on the char one line up.
         let ctx11 = (self.above_byte as usize) | ((self.c1 as usize & 1) << 9);
         self.l2_in[11] = self.l1[11].mix(&self.mix_in, &self.squash, ctx11);
+        // specialise on the order-2 indirect prediction (the byte that most
+        // recently followed this 2-byte context).
+        self.l2_in[12] = self.l1[12].mix(&self.mix_in, &self.squash, self.ind_pred as usize);
         // Two layer-2 combiners over the layer-1 logits — one keyed on the last
         // byte, one on the within-byte bit position — averaged in the logit domain.
         let d2a = self.l2.mix(&self.l2_in, &self.squash, self.c1 as usize);
@@ -1081,6 +1107,7 @@ impl Cm {
         self.l1[9].update(bit, &self.mix_in);
         self.l1[10].update(bit, &self.mix_in);
         self.l1[11].update(bit, &self.mix_in);
+        self.l1[12].update(bit, &self.mix_in);
         self.l2.update(bit, &self.l2_in);
         self.l2b.update(bit, &self.l2_in);
         self.l2c.update(bit, &self.l2_in);
