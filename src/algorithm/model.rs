@@ -290,21 +290,21 @@ impl Cm {
         let st: Vec<Vec<u8>> = (0..NCTX).map(|i| vec![0u8; 1usize << tb[i]]).collect();
         let sm = (0..NCTX).map(|_| vec![1u32 << 31; 256 * 8]).collect();
         let l1 = vec![
-            Mixer::new(NINPUT, MIXCTX, 12),
-            Mixer::new(NINPUT, 256, 12),
-            Mixer::new(NINPUT, 256, 12),
-            Mixer::new(NINPUT, MIX3CTX, 12),
-            Mixer::new(NINPUT, MIX4CTX, 12),
-            Mixer::new(NINPUT, 64, 12),
-            Mixer::new(NINPUT, 4096, 12),
-            Mixer::new(NINPUT, 8192, 12),
-            Mixer::new(NINPUT, 8192, 12),
-            Mixer::new(NINPUT, 4096, 12),
-            Mixer::new(NINPUT, 4096, 12),
-            Mixer::new(NINPUT, 512, 12),
-            Mixer::new(NINPUT, 256, 12),
-            Mixer::new(NINPUT, 1024, 12),
-            Mixer::new(NINPUT, 4096, 12),
+            Mixer::new(NINPUT, MIXCTX, 8),
+            Mixer::new(NINPUT, 256, 8),
+            Mixer::new(NINPUT, 256, 8),
+            Mixer::new(NINPUT, MIX3CTX, 8),
+            Mixer::new(NINPUT, MIX4CTX, 8),
+            Mixer::new(NINPUT, 64, 8),
+            Mixer::new(NINPUT, 4096, 8),
+            Mixer::new(NINPUT, 8192, 8),
+            Mixer::new(NINPUT, 8192, 8),
+            Mixer::new(NINPUT, 4096, 8),
+            Mixer::new(NINPUT, 4096, 8),
+            Mixer::new(NINPUT, 512, 8),
+            Mixer::new(NINPUT, 256, 8),
+            Mixer::new(NINPUT, 1024, 8),
+            Mixer::new(NINPUT, 4096, 8),
         ];
         let l2 = Mixer::new(NL1, 256, 12);
         let l2b = Mixer::new(NL1, 256, 12);
