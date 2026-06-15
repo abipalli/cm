@@ -8,7 +8,7 @@
 
 use super::tables::{build, squash_d};
 
-const NCTX: usize = 12; // context models: orders 0..9 + word + sparse
+const NCTX: usize = 17; // context models: orders 0..9 + word + sparse + text shape/layout
 const NINPUT: usize = NCTX + 5; // + five match models (order-6, order-8, order-10, order-12, order-14)
 const TBITS: u32 = 22;
 const TSIZE: usize = 1 << TBITS;
@@ -16,11 +16,11 @@ const TMASK: u32 = (TSIZE as u32) - 1;
 const MIXCTX: usize = 16384;
 const MMBITS: u32 = 25;
 const MMSIZE: usize = 1 << MMBITS;
-const MMBITS2: u32 = 25;
+const MMBITS2: u32 = 26;
 const MMSIZE2: usize = 1 << MMBITS2;
 const MMBITS3: u32 = 23;
 const MMSIZE3: usize = 1 << MMBITS3;
-const MMBITS4: u32 = 23;
+const MMBITS4: u32 = 24;
 const MMSIZE4: usize = 1 << MMBITS4;
 const MMBITS5: u32 = 24;
 const MMSIZE5: usize = 1 << MMBITS5;
@@ -129,6 +129,7 @@ pub struct Cm {
     c4: u32,
     wordhash: u32,
     c1: i32,
+    col: u32,
 }
 
 impl Cm {
@@ -209,6 +210,7 @@ impl Cm {
             c4: 0,
             wordhash: 0,
             c1: 0,
+            col: 0,
         }
     }
 
@@ -273,6 +275,66 @@ impl Cm {
         } else {
             hashk(0xB00, c4)
         };
+        self.ctxhash[12] = if self.wordhash != 0 {
+            hashk(0xC00, self.wordhash ^ ((self.c1 as u32) << 8))
+        } else {
+            let b1 = c4 & 0xff;
+            let b2 = (c4 >> 8) & 0xff;
+            let b3 = (c4 >> 16) & 0xff;
+            hashk(0xC00, b1 | (b2 << 8) | ((b3 & 0x1f) << 16))
+        };
+        self.ctxhash[13] = if self.wordhash != 0 {
+            hashk(0xD00, self.wordhash.wrapping_mul(0x85eb_ca6b) ^ (c4 & 0xffff))
+        } else {
+            let mut h = 0u32;
+            let mut x = c4;
+            for _ in 0..4 {
+                let b = (x & 0xff) as u8;
+                let class = if (b >= b'a' && b <= b'z') || (b >= b'A' && b <= b'Z') {
+                    1
+                } else if b >= b'0' && b <= b'9' {
+                    2
+                } else if b == b' ' || b == b'\n' || b == b'\t' || b == b'\r' {
+                    3
+                } else {
+                    4
+                };
+                h = (h << 3) | class;
+                x >>= 8;
+            }
+            hashk(0xD00, h ^ (c4 & 0xff))
+        };
+        self.ctxhash[14] = if self.wordhash != 0 {
+            let folded = (c4 & 0xdfdf_dfdf).wrapping_mul(0x27d4_eb2f);
+            hashk(0xE00, self.wordhash.wrapping_mul(0xc2b2_ae35) ^ folded)
+        } else {
+            let b1 = c4 & 0xff;
+            let b2 = (c4 >> 8) & 0xff;
+            let b3 = (c4 >> 16) & 0xff;
+            let b4 = (c4 >> 24) & 0xff;
+            hashk(
+                0xE00,
+                b1.wrapping_mul(3)
+                    ^ b2.wrapping_mul(5)
+                    ^ b3.wrapping_mul(7)
+                    ^ b4.wrapping_mul(11),
+            )
+        };
+        self.ctxhash[15] = hashk(0xF00, (self.col.min(255) << 16) ^ (c4 & 0xffff));
+        let b1 = (c4 & 0xff) as u8;
+        let class = if (b1 >= b'a' && b1 <= b'z') || (b1 >= b'A' && b1 <= b'Z') {
+            1
+        } else if b1 >= b'0' && b1 <= b'9' {
+            2
+        } else if b1 == b' ' || b1 == b'\n' || b1 == b'\t' || b1 == b'\r' {
+            3
+        } else {
+            4
+        };
+        self.ctxhash[16] = hashk(
+            0x1000,
+            ((self.col & 63) << 8) ^ class ^ self.wordhash.wrapping_mul(0x9e37_79b1),
+        );
     }
 
     #[inline]
@@ -473,6 +535,11 @@ impl Cm {
             self.pos += 1;
             self.c4 = (self.c4 << 8) | byte as u32;
             self.c1 = byte as i32;
+            if byte == b'\n' || byte == b'\r' {
+                self.col = 0;
+            } else if self.col < 255 {
+                self.col += 1;
+            }
             if (byte >= b'a' && byte <= b'z') || (byte >= b'A' && byte <= b'Z')
                 || (byte >= b'0' && byte <= b'9')
             {
