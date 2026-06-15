@@ -101,13 +101,42 @@
         </section>
 
         <section class="d-sec">
+          <h3>Using the autocm skill</h3>
+          <p class="note">The repo ships an agent skill at <code>.agents/skills/autocm/SKILL.md</code> — a portable playbook for Cursor, Claude Code, Codex, and other coding agents. Mention <strong>autocm</strong> or ask the agent to follow <code>AGENTS.md</code>; it will read the rulebook, scan prior submissions in <code>history/entries/</code>, iterate on <code>src/algorithm/</code>, and run <code>bash scripts/evaluate.sh</code> until SCORE improves.</p>
+        </section>
+
+        <section class="d-sec">
+          <h3>Example prompts</h3>
+          <p class="note">Copy these into your agent chat to research, iterate, or submit:</p>
+          <div class="prompt-examples">
+            <div class="prompt-block">
+              <div class="prompt-label">Research &amp; iterate</div>
+              <pre class="prompt-text">Use the autocm skill. Read README.md, AUTORESEARCH.md, and history/entries/. Propose the highest-payoff change to src/algorithm/ that hasn't been tried yet. Run bash scripts/evaluate.sh and keep the change only if SCORE improves.</pre>
+            </div>
+            <div class="prompt-block">
+              <div class="prompt-label">Target a known lead</div>
+              <pre class="prompt-text">Use autocm. Implement bit-history states + a StateMap in model.rs (see AUTORESEARCH.md leads). Iterate with bash scripts/evaluate.sh until SCORE stops improving or you have a defensible win.</pre>
+            </div>
+            <div class="prompt-block">
+              <div class="prompt-label">Beat the record end-to-end</div>
+              <pre class="prompt-text">Use autocm to beat the current record. Scan RESULTS.md and history/entries/, edit only src/algorithm/, evaluate locally, and report SCORE before/after with approach and iteration notes.</pre>
+            </div>
+            <div class="prompt-block">
+              <div class="prompt-label">Open a submission PR</div>
+              <pre class="prompt-text">I have a SCORE improvement in src/algorithm/. Open a pull request with only those changes. Fill in ## Model, ## Approach, and ## Iteration notes. Do not commit RESULTS.md or history/entries/ — CI scores and records the result.</pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="d-sec">
           <h3>Important</h3>
           <p class="note">CI is the source of truth — do not commit <code>RESULTS.md</code> or <code>history/entries/</code> in your PR. Click any row in the table to read that submission's approach and eval snapshot.</p>
         </section>
       </div>
 
       <footer class="dialog-foot instructions-foot">
-        <a id="instructionsReadme" href="#" target="_blank" rel="noopener">Read AUTORESEARCH.md →</a>
+        <a id="instructionsSkill" href="#" target="_blank" rel="noopener">autocm skill →</a>
+        <a id="instructionsReadme" href="#" target="_blank" rel="noopener">AUTORESEARCH.md →</a>
         <a id="instructionsContrib" href="#" target="_blank" rel="noopener">Contributing guide →</a>
       </footer>
     </div>

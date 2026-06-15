@@ -358,7 +358,7 @@ tr:hover .open-btn { color: var(--accent); border-color: var(--accent); }
 .dialog-foot a { color: var(--accent); text-decoration: none; font-weight: 600; font-size: 0.88rem; }
 
 /* Instructions dialog */
-.instructions-dialog { width: min(640px, 92vw); }
+.instructions-dialog { width: min(680px, 92vw); }
 .instructions-head { padding-right: 40px; }
 .instructions-body .d-sec:first-child { margin-top: 8px; }
 .instructions-list {
@@ -376,6 +376,33 @@ tr:hover .open-btn { color: var(--accent); border-color: var(--accent); }
   padding: 1px 5px;
   border-radius: 6px;
   font-size: 0.85em;
+}
+.prompt-examples { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.prompt-block {
+  background: #0c1119;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.prompt-label {
+  padding: 7px 12px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+.prompt-text {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: #c7d3e6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .instructions-foot {
   display: flex;

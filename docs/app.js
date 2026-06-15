@@ -235,6 +235,7 @@ function showDialog(dlg) {
 
 function openInstructions(repo) {
   const base = `https://github.com/${repo}`;
+  $("#instructionsSkill").href = `${base}/blob/main/.agents/skills/autocm/SKILL.md`;
   $("#instructionsReadme").href = `${base}/blob/main/AUTORESEARCH.md`;
   $("#instructionsContrib").href = `${base}/blob/main/CONTRIBUTING.md`;
   showDialog($("#instructionsDialog"));
