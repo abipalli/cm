@@ -18,7 +18,8 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0011 | 2026-06-15 | @10d9e | 594283 | -1536 (new record) | +14.08% | `c3774ba` | [0011](history/entries/0011--10d9e.md) | Adds a third APM/SSE calibration stage after the existing two, keyed on a *dense… |
 | 0012 | 2026-06-15 | @10d9e | 588570 | -5713 (new record) | +14.91% | `f60bc60` | [0012](history/entries/0012--10d9e.md) | Expands the context-model bank from 26 to 47 models, all general-purpose, exploi… |
 | 0013 | 2026-06-15 | @10d9e | 588120 | -450 (new record) | +14.97% | `7ef74d8` | [0013](history/entries/0013--10d9e.md) | Adds eight gap-bigram context models to the bank (26 -> ... -> now extended): th… |
+| 0014 | 2026-06-15 | @10d9e | 587905 | -215 (new record) | +15.01% | `f323fca` | [0014](history/entries/0014--10d9e.md) | Re-tunes two online-learning constants that were last set at entry 0007, when th… |
 
-**Current record: 588120** (@10d9e, entry 0013)
+**Current record: 587905** (@10d9e, entry 0014)
 
 Ledger updates are **CI-only** — see [`.github/workflows/scorekeeper.yml`](.github/workflows/scorekeeper.yml).
