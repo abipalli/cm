@@ -35,7 +35,8 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0028 | 2026-06-15 | @10d9e | 582351 | -236 (new record) | +15.81% | `3f5917e` | [0028](history/entries/0028--10d9e.md) | Adds a tenth layer-1 specialist mixer selected by a stride-2 sparse context — … |
 | 0029 | 2026-06-15 | @10d9e | 582052 | -299 (new record) | +15.85% | `a052d1e` | [0029](history/entries/0029--10d9e.md) | Adds an eleventh layer-1 specialist mixer selected by a stride-3 sparse context … |
 | 0030 | 2026-06-15 | @10d9e | 581078 | -974 (new record) | +15.99% | `c292dc5` | [0030](history/entries/0030--10d9e.md) | Adds a new model family: 2D / 'byte-above' modelling, which predicts from the by… |
+| 0031 | 2026-06-15 | @10d9e | 579415 | -1663 (new record) | +16.23% | `722ed67` | [0031](history/entries/0031--10d9e.md) | Adds a new model family: indirect context models. For each of the order-1..4 con… |
 
-**Current record: 581078** (@10d9e, entry 0030)
+**Current record: 579415** (@10d9e, entry 0031)
 
 Ledger updates are **CI-only** — see [`.github/workflows/scorekeeper.yml`](.github/workflows/scorekeeper.yml).
