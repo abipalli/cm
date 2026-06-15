@@ -8,7 +8,7 @@
 
 use super::tables::{build, squash_d};
 
-const NCTX: usize = 83; // orders + word/n-gram + strided-sparse + gap bigrams + 2D + record + indirect + run + text shape/layout
+const NCTX: usize = 86; // orders + word/n-gram + strided-sparse + gap bigrams + 2D + record + indirect + run + nest + text shape/layout
 // Mixer input layout:
 //   [0 .. NCTX)            direct adaptive counters
 //   [SM_BASE .. SM_BASE+NCTX) bit-history StateMap predictions (one per context)
@@ -242,6 +242,8 @@ pub struct Cm {
     prevword3: u32,
     c1: i32,
     run_len: u32, // length of the current run of identical bytes
+    nest_stack: [u8; 64], // stack of currently-open bracket chars (source nesting)
+    nest_depth: usize,
     col: u32,
     line_start: u32,
     prev_line_start: u32,
@@ -391,6 +393,8 @@ impl Cm {
             prevword3: 0,
             c1: 0,
             run_len: 1,
+            nest_stack: [0u8; 64],
+            nest_depth: 0,
             col: 0,
             line_start: 0,
             prev_line_start: 0,
@@ -922,6 +926,23 @@ impl Cm {
         // Run model: last byte + the length of its current run (capped). Models
         // run continuation/termination (zero-runs in binary, repeated chars).
         self.ctxhash[82] = hashk(0x7100, (c4 & 0xff) | (self.run_len.min(255) << 8));
+        // Nesting model: predict from bracket-nesting depth and the enclosing
+        // bracket — captures the ()[]{} structure pervasive in source code.
+        let last_open = if self.nest_depth > 0 {
+            self.nest_stack[self.nest_depth - 1] as u32
+        } else {
+            0
+        };
+        self.ctxhash[83] = hashk(0x7200, (self.nest_depth as u32 & 31) | ((c4 & 0xff) << 5));
+        self.ctxhash[84] = hashk(0x7300, last_open | ((c4 & 0xff) << 8));
+        // enclosing bracket + nesting depth + order-2 context (finer structure)
+        self.ctxhash[85] = hashk(
+            0x7400,
+            last_open
+                .wrapping_mul(0x9e37_79b1)
+                ^ ((self.nest_depth as u32 & 31) << 16)
+                ^ (c4 & 0xffff),
+        );
     }
 
     #[inline]
@@ -1264,6 +1285,21 @@ impl Cm {
                 self.run_len = 1;
             }
             self.c1 = byte as i32;
+            // Nesting model: track the stack of open brackets (source structure).
+            match byte {
+                b'(' | b'[' | b'{' => {
+                    if self.nest_depth < 64 {
+                        self.nest_stack[self.nest_depth] = byte;
+                        self.nest_depth += 1;
+                    }
+                }
+                b')' | b']' | b'}' => {
+                    if self.nest_depth > 0 {
+                        self.nest_depth -= 1;
+                    }
+                }
+                _ => {}
+            }
             if byte == b'\n' || byte == b'\r' {
                 self.col = 0;
             } else if self.col < 255 {
