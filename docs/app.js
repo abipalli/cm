@@ -69,8 +69,8 @@ function renderChart(data) {
 
   const ctx = $("#scoreChart").getContext("2d");
   const grad = ctx.createLinearGradient(0, 0, 0, 320);
-  grad.addColorStop(0, "rgba(92, 200, 255, 0.30)");
-  grad.addColorStop(1, "rgba(92, 200, 255, 0.00)");
+  grad.addColorStop(0, "rgba(255, 255, 255, 0.12)");
+  grad.addColorStop(1, "rgba(255, 255, 255, 0.00)");
 
   new Chart(ctx, {
     type: "line",
@@ -80,15 +80,15 @@ function renderChart(data) {
         {
           label: "SCORE (compressed bytes)",
           data: scores,
-          borderColor: "#5cc8ff",
+          borderColor: "rgba(255, 255, 255, 0.75)",
           backgroundColor: grad,
           fill: true,
           tension: 0.32,
-          borderWidth: 2.5,
-          pointRadius: scored.map((e) => (e.isRecord ? 6 : 4)),
-          pointHoverRadius: 8,
-          pointBackgroundColor: scored.map((e) => (e.isRecord ? "#3ddc97" : "#5cc8ff")),
-          pointBorderColor: "#0a0e14",
+          borderWidth: 1.5,
+          pointRadius: scored.map((e) => (e.isRecord ? 5 : 3)),
+          pointHoverRadius: 7,
+          pointBackgroundColor: scored.map((e) => (e.isRecord ? "#4ade80" : "rgba(255, 255, 255, 0.55)")),
+          pointBorderColor: "#000",
           pointBorderWidth: 2,
         },
       ],
@@ -100,11 +100,13 @@ function renderChart(data) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: "#0c1119",
-          borderColor: "#243044",
+          backgroundColor: "rgba(0, 0, 0, 0.88)",
+          borderColor: "rgba(255, 255, 255, 0.12)",
           borderWidth: 1,
-          titleColor: "#e6edf6",
-          bodyColor: "#cdd8e8",
+          titleColor: "#fff",
+          bodyColor: "rgba(255, 255, 255, 0.68)",
+          titleFont: { family: "'JetBrains Mono', monospace", size: 11 },
+          bodyFont: { family: "'DM Mono', monospace", size: 10 },
           padding: 12,
           callbacks: {
             title: (items) => {
@@ -120,13 +122,27 @@ function renderChart(data) {
       },
       scales: {
         x: {
-          grid: { color: "rgba(36, 48, 68, 0.6)" },
-          ticks: { color: "#8b9bb2" },
+          grid: { color: "rgba(255, 255, 255, 0.05)" },
+          ticks: {
+            color: "rgba(255, 255, 255, 0.28)",
+            font: { family: "'DM Mono', monospace", size: 9 },
+          },
+          border: { color: "rgba(255, 255, 255, 0.07)" },
         },
         y: {
-          grid: { color: "rgba(36, 48, 68, 0.6)" },
-          ticks: { color: "#8b9bb2", callback: (v) => fmt(v) },
-          title: { display: true, text: "total compressed bytes", color: "#8b9bb2" },
+          grid: { color: "rgba(255, 255, 255, 0.05)" },
+          ticks: {
+            color: "rgba(255, 255, 255, 0.28)",
+            font: { family: "'DM Mono', monospace", size: 9 },
+            callback: (v) => fmt(v),
+          },
+          border: { color: "rgba(255, 255, 255, 0.07)" },
+          title: {
+            display: true,
+            text: "total compressed bytes",
+            color: "rgba(255, 255, 255, 0.22)",
+            font: { family: "'DM Mono', monospace", size: 9 },
+          },
         },
       },
     },
