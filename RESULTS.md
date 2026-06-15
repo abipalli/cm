@@ -30,7 +30,8 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0023 | 2026-06-15 | @10d9e | 583253 | -615 (new record) | +15.68% | `a5ff3e6` | [0023](history/entries/0023--10d9e.md) | Adds a sixth layer-1 specialist mixer selected by the current match state — th… |
 | 0024 | 2026-06-15 | @10d9e | 583001 | -252 (new record) | +15.71% | `1ce805f` | [0024](history/entries/0024--10d9e.md) | Adds a seventh layer-1 specialist mixer selected by the byte column since the la… |
 | 0025 | 2026-06-15 | @10d9e | 582758 | -243 (new record) | +15.75% | `1696f2b` | [0025](history/entries/0025--10d9e.md) | Adds an eighth layer-1 specialist mixer selected by a hash of the last four byte… |
+| 0026 | 2026-06-15 | @10d9e | 582663 | -95 (new record) | +15.76% | `b0d13d3` | [0026](history/entries/0026--10d9e.md) | Adds a ninth layer-1 specialist mixer selected by a hash of the last six bytes (… |
 
-**Current record: 582758** (@10d9e, entry 0025)
+**Current record: 582663** (@10d9e, entry 0026)
 
 Ledger updates are **CI-only** — see [`.github/workflows/scorekeeper.yml`](.github/workflows/scorekeeper.yml).
