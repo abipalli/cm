@@ -8,7 +8,7 @@
 
 use super::tables::{build, squash_d};
 
-const NCTX: usize = 23; // orders 0..9/11 + word + 5 sparse + text shape/layout + order-5
+const NCTX: usize = 26; // orders 0..9/11 + word + 5 sparse + text shape/layout + order-5 + word n-grams
 // Mixer input layout:
 //   [0 .. NCTX)            direct adaptive counters
 //   [SM_BASE .. SM_BASE+NCTX) bit-history StateMap predictions (one per context)
@@ -158,6 +158,8 @@ pub struct Cm {
     bitcount: i32,
     c4: u32,
     wordhash: u32,
+    prevword: u32,
+    prevword2: u32,
     c1: i32,
     col: u32,
 }
@@ -244,6 +246,8 @@ impl Cm {
             bitcount: 0,
             c4: 0,
             wordhash: 0,
+            prevword: 0,
+            prevword2: 0,
             c1: 0,
             col: 0,
         }
@@ -433,6 +437,39 @@ impl Cm {
             )
         } else {
             hashk(0x1600, c4)
+        };
+        // word bigram: previous completed word + the word currently being typed.
+        self.ctxhash[23] = if self.prevword != 0 {
+            hashk(
+                0x1700,
+                self.prevword
+                    .wrapping_mul(0x9e37_79b1)
+                    .wrapping_add(self.wordhash.wrapping_mul(0x85eb_ca6b)),
+            )
+        } else {
+            0
+        };
+        // previous word + recent literal bytes: models the gap/punctuation that
+        // follows a word and the run-up into the next one.
+        self.ctxhash[24] = if self.prevword != 0 {
+            hashk(
+                0x1800,
+                self.prevword.wrapping_mul(0xc2b2_ae35) ^ (c4 & 0xffff),
+            )
+        } else {
+            0
+        };
+        // word trigram: the two preceding words plus the word being typed.
+        self.ctxhash[25] = if self.prevword2 != 0 {
+            hashk(
+                0x1900,
+                self.prevword2
+                    .wrapping_mul(0x27d4_eb2f)
+                    .wrapping_add(self.prevword.wrapping_mul(0x9e37_79b1))
+                    .wrapping_add(self.wordhash.wrapping_mul(0x85eb_ca6b)),
+            )
+        } else {
+            0
         };
     }
 
@@ -659,6 +696,11 @@ impl Cm {
             {
                 self.wordhash = hashk(self.wordhash, (byte | 0x20) as u32);
             } else {
+                // Word boundary: shift the just-finished word into the word history.
+                if self.wordhash != 0 {
+                    self.prevword2 = self.prevword;
+                    self.prevword = self.wordhash;
+                }
                 self.wordhash = 0;
             }
             if self.pos >= 6 {
