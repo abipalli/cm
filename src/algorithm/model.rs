@@ -8,7 +8,7 @@
 
 use super::tables::{build, squash_d};
 
-const NCTX: usize = 69; // orders + word/n-gram + strided-sparse + gap bigrams + text shape/layout
+const NCTX: usize = 75; // orders + word/n-gram + strided-sparse + gap bigrams + 2D byte-above (x2 rows) + record + text shape/layout
 // Mixer input layout:
 //   [0 .. NCTX)            direct adaptive counters
 //   [SM_BASE .. SM_BASE+NCTX) bit-history StateMap predictions (one per context)
@@ -20,7 +20,7 @@ const TBITS: u32 = 23;
 const TSIZE: usize = 1 << TBITS;
 const TMASK: u32 = (TSIZE as u32) - 1;
 const MIXCTX: usize = 16384;
-const NL1: usize = 11; // number of layer-1 specialist mixers
+const NL1: usize = 12; // number of layer-1 specialist mixers
 const MIX3CTX: usize = 8192; // order-2 specialist rows
 const MIX4CTX: usize = 8192; // order-3 specialist rows
 const MMBITS: u32 = 25;
@@ -231,6 +231,13 @@ pub struct Cm {
     prevword3: u32,
     c1: i32,
     col: u32,
+    line_start: u32,
+    prev_line_start: u32,
+    prev2_line_start: u32,
+    rpos: [u32; 256], // last position each byte value occurred (record detector)
+    rlen: u32,        // current dominant recurrence period (record length)
+    rcount: i32,      // confidence in rlen (Boyer-Moore majority vote)
+    above_byte: u32,  // byte directly above (same column, previous line); 256 if none
 }
 
 impl Cm {
@@ -258,6 +265,7 @@ impl Cm {
             Mixer::new(NINPUT, 8192, 12),
             Mixer::new(NINPUT, 4096, 12),
             Mixer::new(NINPUT, 4096, 12),
+            Mixer::new(NINPUT, 512, 12),
         ];
         let l2 = Mixer::new(NL1, 256, 12);
         let l2b = Mixer::new(NL1, 256, 12);
@@ -346,6 +354,13 @@ impl Cm {
             prevword3: 0,
             c1: 0,
             col: 0,
+            line_start: 0,
+            prev_line_start: 0,
+            prev2_line_start: 0,
+            rpos: [0; 256],
+            rlen: 0,
+            rcount: 0,
+            above_byte: 256,
         }
     }
 
@@ -767,6 +782,61 @@ impl Cm {
         } else {
             0
         };
+        // 2D / "byte above" model: the byte at the same column in the previous
+        // line. Powerful for aligned source code, text and tabular structure.
+        let col2d = self.pos.wrapping_sub(self.line_start);
+        let above_pos = self.prev_line_start.wrapping_add(col2d);
+        let have_above = self.prev_line_start != 0 && above_pos < self.line_start;
+        let above = if have_above { self.b(above_pos) as u32 } else { 0 };
+        self.above_byte = if have_above { above } else { 256 };
+        // byte above + current column
+        self.ctxhash[69] = if have_above {
+            hashk(0x6300, above | (col2d.min(1023) << 9))
+        } else {
+            0
+        };
+        // byte above + byte to the left (2D neighbourhood)
+        self.ctxhash[70] = if have_above {
+            hashk(0x6400, above | ((self.c1 as u32) << 8))
+        } else {
+            0
+        };
+        // byte above + the byte above-and-left (diagonal), captures 2D runs
+        self.ctxhash[71] = if have_above && above_pos > self.prev_line_start {
+            let above_left = self.b(above_pos - 1) as u32;
+            hashk(0x6500, above | (above_left << 8))
+        } else {
+            0
+        };
+        // byte two lines up (same column) + byte above: a vertical bigram that
+        // captures repeated/aligned blocks spanning multiple lines.
+        let above2_pos = self.prev2_line_start.wrapping_add(col2d);
+        self.ctxhash[74] = if self.prev2_line_start != 0
+            && above2_pos < self.prev_line_start
+            && have_above
+        {
+            let above2 = self.b(above2_pos) as u32;
+            hashk(0x6800, above | (above2 << 8))
+        } else {
+            0
+        };
+        // Record model: the byte one detected-period back (the "byte above" for
+        // newline-free periodic data such as executables and tables).
+        let r = self.rlen;
+        let rec_ok = self.rcount > 8 && r >= 2 && r < self.pos;
+        let recb = if rec_ok { self.b(self.pos - r) as u32 } else { 0 };
+        self.ctxhash[72] = if rec_ok {
+            hashk(0x6600, recb | ((self.c1 as u32) << 8))
+        } else {
+            0
+        };
+        // record byte + the byte just before it one period back (2-gram above)
+        self.ctxhash[73] = if rec_ok && self.pos > r + 1 {
+            let recb1 = self.b(self.pos - r - 1) as u32;
+            hashk(0x6700, recb | (recb1 << 8))
+        } else {
+            0
+        };
     }
 
     #[inline]
@@ -902,6 +972,9 @@ impl Cm {
             self.c1 as usize
         };
         self.l2_in[10] = self.l1[10].mix(&self.mix_in, &self.squash, ctx10);
+        // byte-above selector (2D structure): specialise on the char one line up.
+        let ctx11 = (self.above_byte as usize) | ((self.c1 as usize & 1) << 9);
+        self.l2_in[11] = self.l1[11].mix(&self.mix_in, &self.squash, ctx11);
         // Two layer-2 combiners over the layer-1 logits — one keyed on the last
         // byte, one on the within-byte bit position — averaged in the logit domain.
         let d2a = self.l2.mix(&self.l2_in, &self.squash, self.c1 as usize);
@@ -986,6 +1059,7 @@ impl Cm {
         self.l1[8].update(bit, &self.mix_in);
         self.l1[9].update(bit, &self.mix_in);
         self.l1[10].update(bit, &self.mix_in);
+        self.l1[11].update(bit, &self.mix_in);
         self.l2.update(bit, &self.l2_in);
         self.l2b.update(bit, &self.l2_in);
         self.l2c.update(bit, &self.l2_in);
@@ -1064,6 +1138,25 @@ impl Cm {
                 self.col = 0;
             } else if self.col < 255 {
                 self.col += 1;
+            }
+            if byte == b'\n' {
+                self.prev2_line_start = self.prev_line_start;
+                self.prev_line_start = self.line_start;
+                self.line_start = self.pos;
+            }
+            // Record-length detector: majority-vote the distance between repeats
+            // of each byte value, yielding the dominant period for data (binary /
+            // tabular) that has no newline structure.
+            let bi = byte as usize;
+            let d = self.pos - self.rpos[bi];
+            self.rpos[bi] = self.pos;
+            if d == self.rlen {
+                if self.rcount < 1024 { self.rcount += 1; }
+            } else if self.rcount > 0 {
+                self.rcount -= 1;
+            } else {
+                self.rlen = d;
+                self.rcount = 1;
             }
             if (byte >= b'a' && byte <= b'z') || (byte >= b'A' && byte <= b'Z')
                 || (byte >= b'0' && byte <= b'9')
