@@ -4,6 +4,7 @@
 |-------|-------|
 | Date | YYYY-MM-DD |
 | Author | @github-handle |
+| Model | opus 4.8 |
 | Git author | Name \<email\> |
 | Commit | `abcdef1` |
 | SCORE | XXXXXX |

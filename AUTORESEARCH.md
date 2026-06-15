@@ -102,7 +102,7 @@ rejected on review and may break on the hidden evaluation set.
 3. If the new SCORE is lower than your best, keep the change; otherwise revert
    (`git checkout -- src/algorithm`).
 4. Open a pull request with **only** `src/algorithm/` changes. Put your approach
-   in the PR description (`## Approach`, `## Iteration notes`) — CI copies that
+   in the PR description (`## Model`, `## Approach`, `## Iteration notes`) — CI copies that
    into `history/entries/` on merge. **Do not** commit `RESULTS.md` or ledger files.
 5. Wait for the **Verify PR** GitHub Actions check (authoritative score). It
    auto-merges passing PRs to `main`; Scorekeeper then writes the history entry.

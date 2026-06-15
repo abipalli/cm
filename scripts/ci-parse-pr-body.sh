@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Extract ## Approach / ## Iteration notes from a PR body (or any markdown).
+# Extract ## Model / ## Approach / ## Iteration notes from a PR body (or any markdown).
 # FROZEN — do not edit as part of autoresearch.
 set -euo pipefail
 

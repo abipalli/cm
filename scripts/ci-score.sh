@@ -51,6 +51,7 @@ bash scripts/evaluate.sh --no-guard
 
 # PR metadata. The token here is the read-only default GITHUB_TOKEN.
 author="@${GITHUB_ACTOR:-unknown}"
+model=""
 note=""
 attempts=""
 pr_body=""
@@ -62,13 +63,18 @@ if [[ -n "${GITHUB_REPOSITORY:-}" && -n "${GITHUB_SHA:-}" ]]; then
   [[ -n "$pr_author" ]] && author="@${pr_author}"
 fi
 if [[ -n "$pr_body" ]]; then
+  model="$(bash scripts/ci-parse-pr-body.sh Model "$pr_body" || true)"
   note="$(bash scripts/ci-parse-pr-body.sh Approach "$pr_body" || true)"
   attempts="$(bash scripts/ci-parse-pr-body.sh "Iteration notes" "$pr_body" || true)"
+fi
+if [[ -z "$model" ]]; then
+  echo "scorekeeper: missing required ## Model section in PR description" >&2
+  exit 1
 fi
 [[ -z "$note" ]] && note="$(git log -1 --format=%B | sed '/^$/d' | head -5)"
 [[ -z "$note" ]] && note="Algorithm update merged to main (no PR description captured)."
 
-record_args=(--ci --author "$author" --note "$note" --diff-base HEAD~1)
+record_args=(--ci --author "$author" --model "$model" --note "$note" --diff-base HEAD~1)
 [[ -n "$attempts" ]] && record_args+=(--attempts "$attempts")
 
 echo "== record submission (generate ledger files) =="

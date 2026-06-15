@@ -4,6 +4,7 @@
 |-------|-------|
 | Date | 2026-06-14 |
 | Author | @10d9e |
+| Model | claude opus 4.8 |
 | Git author | autoresearch \<autoresearch@example.com\> |
 | Commit | `d12023b` |
 | SCORE | 642822 |

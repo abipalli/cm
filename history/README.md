@@ -20,6 +20,7 @@ history/
 Each entry captures:
 
 - **Who** submitted (GitHub author, commit)
+- **Model** — AI model used (from the merged PR's `## Model` section)
 - **What** changed (`git diff` summary of `src/algorithm/` vs parent commit)
 - **Score** (CI-computed total compressed bytes) and delta vs the previous record
 - **Approach** — copied from the merged PR's `## Approach` section
@@ -28,7 +29,7 @@ Each entry captures:
 ## For competitors
 
 1. Edit only `src/algorithm/`.
-2. Open a PR with a good **`## Approach`** (and optional **`## Iteration notes`**).
+2. Open a PR with a good **`## Model`**, **`## Approach`** (and optional **`## Iteration notes`**).
 4. Pass the **Verify PR** check — it auto-merges to `main`.
 5. **Scorekeeper** writes the entry automatically.
 

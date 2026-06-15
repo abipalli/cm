@@ -19,7 +19,7 @@ Read [`AUTORESEARCH.md`](AUTORESEARCH.md) for the full rules before editing.
    bash scripts/evaluate.sh
    ```
 5. Commit **only** your algorithm changes and open a pull request.
-6. Fill in the PR template — especially **`## Approach`** and
+6. Fill in the PR template — especially **`## Model`**, **`## Approach`**, and
    **`## Iteration notes`**. CI uses these when writing the history entry.
 7. Wait for **Verify PR** — it scores on GitHub, then **auto-merges** to `main`.
 8. **Scorekeeper** runs on merge and appends the verified ledger entry.
@@ -41,7 +41,7 @@ updates to `main`.
 ## Pull request checklist
 
 - [ ] Only `src/algorithm/` changed
-- [ ] PR template filled in (`## Approach` required for history)
+- [ ] PR template filled in (`## Model` and `## Approach` required for history)
 - [ ] **Verify PR** GitHub Actions check passes
 - [ ] No corpus-specific tuning or side channels (see AUTORESEARCH.md)
 - [ ] Did **not** commit `RESULTS.md` or `history/entries/`

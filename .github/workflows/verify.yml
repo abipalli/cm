@@ -20,6 +20,17 @@ jobs:
       - name: PR boundary guard
         run: bash scripts/guard-pr.sh
 
+      - name: Require Model in PR description
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          model="$(bash scripts/ci-parse-pr-body.sh Model "$PR_BODY" || true)"
+          if [[ -z "$model" ]]; then
+            echo "::error::Missing required ## Model section in the PR description."
+            echo "Add a ## Model section naming the AI model used (e.g. opus 4.8, codex 5.5)."
+            exit 1
+          fi
+
       - name: Correctness gate + score
         run: bash scripts/evaluate.sh --no-guard
 
@@ -71,6 +82,6 @@ jobs:
             echo
             echo "Auto-merge will run via **Auto-merge** workflow (default \`GITHUB_TOKEN\`)."
             echo "**Scorekeeper** will append the verified entry to \`RESULTS.md\` and"
-            echo "\`history/entries/\` from your PR description (\`## Approach\`,"
-            echo "\`## Iteration notes\`)."
+            echo "\`history/entries/\` from your PR description (\`## Model\`,"
+            echo "\`## Approach\`, \`## Iteration notes\`)."
           } | gh pr comment "${{ github.event.pull_request.number }}" --body-file -

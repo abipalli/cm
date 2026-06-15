@@ -3,14 +3,15 @@
 # FROZEN — do not edit as part of autoresearch.
 #
 # Usage:
-#   bash scripts/record.sh --author @handle --note "what you changed and why"
-#   bash scripts/record.sh --ci --author @handle --note "..." --diff-base HEAD~1
+#   bash scripts/record.sh --author @handle --model "codex 5.5" --note "what you changed and why"
+#   bash scripts/record.sh --ci --author @handle --model "..." --note "..." --diff-base HEAD~1
 #
 # --ci: skip guard (GitHub Actions scorekeeper only). Never use locally to commit ledger.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 author=""
+model=""
 note=""
 attempts=""
 ci_mode=0
@@ -19,6 +20,7 @@ diff_base="HEAD"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --author) author="${2:-}"; shift 2 ;;
+    --model) model="${2:-}"; shift 2 ;;
     --note) note="${2:-}"; shift 2 ;;
     --attempts) attempts="${2:-}"; shift 2 ;;
     --ci) ci_mode=1; shift ;;
@@ -33,6 +35,11 @@ done
 
 if [[ -z "$note" ]]; then
   echo "record.sh: --note is required (describe your approach)" >&2
+  exit 2
+fi
+
+if (( ci_mode )) && [[ -z "$model" ]]; then
+  echo "record.sh: --model is required in CI mode (name the AI model used)" >&2
   exit 2
 fi
 
@@ -146,6 +153,9 @@ mkdir -p history/entries
   echo "|-------|-------|"
   echo "| Date | ${date_iso} |"
   echo "| Author | ${author} |"
+  if [[ -n "$model" ]]; then
+    echo "| Model | ${model} |"
+  fi
   echo "| Git author | ${git_name} \<${git_email}\> |"
   echo "| Commit | \`${commit}\` (${commit_full}) |"
   echo "| SCORE | ${score} |"

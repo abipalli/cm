@@ -73,6 +73,7 @@ For PR workflow and CI rules, see [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 When reporting progress, include:
 
 - **SCORE** before and after (lower is better)
+- **Model** — which AI model assisted the work (e.g. opus 4.8, codex 5.5)
 - **Approach** — what changed and why it should help
 - **Iteration notes** — what you tried, what failed, what to try next
 - Confirmation that only `src/algorithm/` was edited and losslessness holds
