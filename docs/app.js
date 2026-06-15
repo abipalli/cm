@@ -166,6 +166,7 @@ function renderGrid(data) {
                onerror="this.style.visibility='hidden'" />
           <span class="aname">${escapeHtml(e.author)}</span>
         </td>
+        <td class="c-model">${escapeHtml(e.model || "—")}</td>
         <td class="c-score">${fmt(e.score)}</td>
         <td class="c-delta"><span class="badge ${deltaClass}">${escapeHtml(compactDelta(e))}</span></td>
         <td class="c-zstd">${escapeHtml(e.vsZstd)}</td>
@@ -176,13 +177,14 @@ function renderGrid(data) {
 
   $("#grid").innerHTML = `
     <colgroup>
-      <col class="w-id" /><col class="w-author" /><col class="w-score" />
+      <col class="w-id" /><col class="w-author" /><col class="w-model" /><col class="w-score" />
       <col class="w-delta" /><col class="w-zstd" /><col class="w-open" />
     </colgroup>
     <thead>
       <tr>
         <th class="c-id">#</th>
         <th class="c-author">Committer</th>
+        <th class="c-model">Model</th>
         <th class="c-score">SCORE</th>
         <th class="c-delta">Δ</th>
         <th class="c-zstd">vs zstd</th>
@@ -230,12 +232,13 @@ function openDialog(e, repo) {
         </div>
         <div class="d-sub">
           <a href="${profile}" target="_blank" rel="noopener">${escapeHtml(e.author)}</a>
-          · ${escapeHtml(e.date)}
+          · ${escapeHtml(e.date)}${e.model ? ` · ${escapeHtml(e.model)}` : ""}
         </div>
       </div>
     </header>
 
     <div class="d-metrics">
+      ${e.model ? `<div class="d-metric"><span class="m-label">Model</span><span class="m-value">${escapeHtml(e.model)}</span></div>` : ""}
       <div class="d-metric"><span class="m-label">SCORE</span><span class="m-value">${fmt(e.score)}</span></div>
       <div class="d-metric"><span class="m-label">Δ vs record</span><span class="m-value"><span class="badge ${deltaClass}">${escapeHtml(e.delta)}</span></span></div>
       <div class="d-metric"><span class="m-label">vs zstd −22</span><span class="m-value">${escapeHtml(e.vsZstd)}</span></div>

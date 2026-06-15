@@ -137,11 +137,12 @@ table.leaderboard {
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 0.9rem;
-  min-width: 860px;
+  min-width: 980px;
 }
 /* fixed column widths -> constant, tabular columns */
 col.w-id { width: 76px; }
-col.w-author { width: 162px; }
+col.w-author { width: 148px; }
+col.w-model { width: 132px; }
 col.w-score { width: 100px; }
 col.w-delta { width: 112px; }
 col.w-zstd { width: 84px; }
@@ -201,6 +202,11 @@ table.leaderboard tbody tr.record td.c-id { box-shadow: inset 3px 0 0 var(--good
   object-fit: cover; vertical-align: middle; margin-right: 8px;
 }
 .c-author .aname { color: var(--text); font-weight: 600; vertical-align: middle; }
+
+.c-model {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
 
 .c-score {
   font-size: 1.02rem;
