@@ -8,7 +8,7 @@
 
 use super::tables::{build, squash_d};
 
-const NCTX: usize = 66; // orders + word + strided-sparse (3- and 4-sample) + gap bigrams + text shape/layout
+const NCTX: usize = 69; // orders + word/n-gram + strided-sparse + gap bigrams + text shape/layout
 // Mixer input layout:
 //   [0 .. NCTX)            direct adaptive counters
 //   [SM_BASE .. SM_BASE+NCTX) bit-history StateMap predictions (one per context)
@@ -227,6 +227,7 @@ pub struct Cm {
     wordhash: u32,
     prevword: u32,
     prevword2: u32,
+    prevword3: u32,
     c1: i32,
     col: u32,
 }
@@ -333,6 +334,7 @@ impl Cm {
             wordhash: 0,
             prevword: 0,
             prevword2: 0,
+            prevword3: 0,
             c1: 0,
             col: 0,
         }
@@ -720,6 +722,42 @@ impl Cm {
                 hashk(tag, c4)
             };
         }
+        // word 4-gram: three preceding words plus the word currently being typed.
+        self.ctxhash[66] = if self.prevword3 != 0 {
+            hashk(
+                0x6000,
+                self.prevword3
+                    .wrapping_mul(0x1656_67b1)
+                    .wrapping_add(self.prevword2.wrapping_mul(0x27d4_eb2f))
+                    .wrapping_add(self.prevword.wrapping_mul(0x9e37_79b1))
+                    .wrapping_add(self.wordhash.wrapping_mul(0x85eb_ca6b)),
+            )
+        } else {
+            0
+        };
+        // word skip-gram: the word two back paired with the word being typed
+        // (skips the immediately preceding word).
+        self.ctxhash[67] = if self.prevword2 != 0 {
+            hashk(
+                0x6100,
+                self.prevword2
+                    .wrapping_mul(0xc2b2_ae35)
+                    .wrapping_add(self.wordhash.wrapping_mul(0x9e37_79b1)),
+            )
+        } else {
+            0
+        };
+        // word skip-gram: the word three back paired with the word being typed.
+        self.ctxhash[68] = if self.prevword3 != 0 {
+            hashk(
+                0x6200,
+                self.prevword3
+                    .wrapping_mul(0x1656_67b1)
+                    .wrapping_add(self.wordhash.wrapping_mul(0x9e37_79b1)),
+            )
+        } else {
+            0
+        };
     }
 
     #[inline]
@@ -980,6 +1018,7 @@ impl Cm {
             } else {
                 // Word boundary: shift the just-finished word into the word history.
                 if self.wordhash != 0 {
+                    self.prevword3 = self.prevword2;
                     self.prevword2 = self.prevword;
                     self.prevword = self.wordhash;
                 }
