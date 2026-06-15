@@ -13,7 +13,8 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0006 | 2026-06-15 | @10d9e | 614363 | -14463 (new record) | +11.17% | `847678f` | [0006](history/entries/0006--10d9e.md) | Adds an adaptive bit-history `StateMap` per context model and indexes each State… |
 | 0007 | 2026-06-15 | @10d9e | 610511 | -3852 (new record) | +11.73% | `d8a8cd9` | [0007](history/entries/0007--10d9e.md) | Retunes three online-learning adaptation-rate constants — no new models, no co… |
 | 0008 | 2026-06-15 | @10d9e | 606779 | -3732 (new record) | +12.27% | `03e1d79` | [0008](history/entries/0008--10d9e.md) | Extends the context-model bank from 17 to 23 models — all general-purpose, no … |
+| 0009 | 2026-06-15 | @10d9e | 605962 | -817 (new record) | +12.40% | `8a1b5e6` | [0009](history/entries/0009--10d9e.md) | Adds word-level n-gram context models, targeting natural-language text where the… |
 
-**Current record: 606779** (@10d9e, entry 0008)
+**Current record: 605962** (@10d9e, entry 0009)
 
 Ledger updates are **CI-only** — see [`.github/workflows/scorekeeper.yml`](.github/workflows/scorekeeper.yml).
