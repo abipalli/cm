@@ -178,6 +178,7 @@ pub struct Cm {
     l2b: Mixer,       // second layer-2 combiner (bit-position ctx)
     l2c: Mixer,       // third layer-2 combiner (match-state ctx)
     l2d: Mixer,       // fourth layer-2 combiner (2nd-to-last-byte ctx)
+    l2e: Mixer,       // fifth layer-2 combiner (word ctx)
     l2_in: [i32; NL1],
     buf: Vec<u8>,
     bufmask: u32,
@@ -256,6 +257,7 @@ impl Cm {
         let l2b = Mixer::new(NL1, 256, 12);
         let l2c = Mixer::new(NL1, 256, 12);
         let l2d = Mixer::new(NL1, 256, 12);
+        let l2e = Mixer::new(NL1, 256, 12);
 
         let mut bufsize: u32 = 1;
         while (bufsize as usize) < expected_len + 16 && bufsize < (1 << 27) {
@@ -285,6 +287,7 @@ impl Cm {
             l2b,
             l2c,
             l2d,
+            l2e,
             l2_in: [0; NL1],
             buf: vec![0u8; bufsize as usize],
             bufmask: bufsize - 1,
@@ -870,7 +873,13 @@ impl Cm {
             | (if self.matchlen4 > 0 { 1 } else { 0 });
         let d2c = self.l2c.mix(&self.l2_in, &self.squash, l2cctx);
         let d2d = self.l2d.mix(&self.l2_in, &self.squash, ((self.c4 >> 8) & 0xff) as usize);
-        let mut p = squash_d(&self.squash, (d2a + d2b + d2c + d2d) >> 2);
+        let l2ectx = if self.wordhash != 0 {
+            (self.wordhash.wrapping_mul(0x9e37_79b1) >> 24) as usize
+        } else {
+            self.c1 as usize
+        };
+        let d2e = self.l2e.mix(&self.l2_in, &self.squash, l2ectx);
+        let mut p = squash_d(&self.squash, (d2a + d2b + d2c + d2d + d2e) / 5);
         if p < 1 { p = 1; }
         if p > 4094 { p = 4094; }
 
@@ -937,6 +946,7 @@ impl Cm {
         self.l2b.update(bit, &self.l2_in);
         self.l2c.update(bit, &self.l2_in);
         self.l2d.update(bit, &self.l2_in);
+        self.l2e.update(bit, &self.l2_in);
         for i in 0..NCTX {
             let ix = self.idx[i];
             let n = self.cn[i][ix] as i32;
