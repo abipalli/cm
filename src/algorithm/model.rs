@@ -18,7 +18,7 @@ const MM_BASE: usize = 2 * NCTX;
 const NINPUT: usize = 2 * NCTX + 6;
 const TBITS: u32 = 23; // default per-model context-table size (2^TBITS slots)
 const MIXCTX: usize = 16384;
-const NL1: usize = 16; // number of layer-1 specialist mixers
+const NL1: usize = 17; // number of layer-1 specialist mixers
 const MIX3CTX: usize = 8192; // order-2 specialist rows
 const MIX4CTX: usize = 8192; // order-3 specialist rows
 const FBITS: u32 = 21; // indirect order-3/-4 follow-history hash table bits
@@ -305,6 +305,7 @@ impl Cm {
             Mixer::new(NINPUT, 256, 8),
             Mixer::new(NINPUT, 1024, 8),
             Mixer::new(NINPUT, 4096, 8),
+            Mixer::new(NINPUT, 256, 8),
             Mixer::new(NINPUT, 256, 8),
         ];
         let l2 = Mixer::new(NL1, 256, 12);
@@ -1159,6 +1160,12 @@ impl Cm {
             | (cls(self.c4 >> 16) << 4)
             | (cls(self.c4 >> 24) << 6);
         self.l2_in[15] = self.l1[15].mix(&self.mix_in, &self.squash, ccsel);
+        // combined mode selector: last byte's high nibble + char-class of the
+        // last two bytes (a richer visual+semantic mode than either alone).
+        let modesel = ((self.c4 & 0xf0) >> 4) as usize
+            | (cls(self.c4) << 4)
+            | (cls(self.c4 >> 8) << 6);
+        self.l2_in[16] = self.l1[16].mix(&self.mix_in, &self.squash, modesel);
         // Two layer-2 combiners over the layer-1 logits — one keyed on the last
         // byte, one on the within-byte bit position — averaged in the logit domain.
         let d2a = self.l2.mix(&self.l2_in, &self.squash, self.c1 as usize);
@@ -1252,6 +1259,7 @@ impl Cm {
         self.l1[13].update(bit, &self.mix_in);
         self.l1[14].update(bit, &self.mix_in);
         self.l1[15].update(bit, &self.mix_in);
+        self.l1[16].update(bit, &self.mix_in);
         self.l2.update(bit, &self.l2_in);
         self.l2b.update(bit, &self.l2_in);
         self.l2c.update(bit, &self.l2_in);
