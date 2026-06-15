@@ -46,7 +46,8 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0039 | 2026-06-15 | @10d9e | 578672 | 0 (tie) | +16.34% | `c71ba05` | [0039](history/entries/0039--10d9e.md) | Memory optimization, provably identical output. The direct-counter probability t… |
 | 0040 | 2026-06-15 | @10d9e | 578552 | -120 (new record) | +16.36% | `e0ecc8f` | [0040](history/entries/0040--10d9e.md) | Adds a new model family: a nesting model that tracks the stack of currently-open… |
 | 0041 | 2026-06-15 | @10d9e | 578467 | -85 (new record) | +16.37% | `982c9ee` | [0041](history/entries/0041--10d9e.md) | Adds a fourteenth layer-1 specialist mixer selected by the current nesting state… |
+| 0042 | 2026-06-15 | @10d9e | 578156 | -311 (new record) | +16.42% | `b738180` | [0042](history/entries/0042--10d9e.md) | Retunes the nonstationary bit-history state transition that feeds every context … |
 
-**Current record: 578467** (@10d9e, entry 0041)
+**Current record: 578156** (@10d9e, entry 0042)
 
 Ledger updates are **CI-only** — see [`.github/workflows/scorekeeper.yml`](.github/workflows/scorekeeper.yml).
