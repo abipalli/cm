@@ -20,7 +20,10 @@
           <p class="tagline">Smaller is better — total compressed bytes over the fixed corpus.</p>
         </div>
       </div>
-      <a class="repo-link" id="repoLink" href="#" target="_blank" rel="noopener">View on GitHub →</a>
+      <div class="header-actions">
+        <button type="button" class="repo-link instructions-btn" id="instructionsBtn">How to compete</button>
+        <a class="repo-link" id="repoLink" href="#" target="_blank" rel="noopener">View on GitHub →</a>
+      </div>
     </div>
   </header>
 
@@ -57,6 +60,57 @@
 
   <dialog id="entryDialog" class="entry-dialog">
     <div class="dialog-inner" id="dialogInner"></div>
+  </dialog>
+
+  <dialog id="instructionsDialog" class="entry-dialog instructions-dialog">
+    <div class="dialog-inner">
+      <button class="dialog-close" aria-label="Close" data-close>×</button>
+      <header class="dialog-head instructions-head">
+        <div class="d-head-text">
+          <div class="d-title">How to compete</div>
+          <div class="d-sub">Improve the lossless compressor and lower the SCORE.</div>
+        </div>
+      </header>
+
+      <div class="instructions-body">
+        <section class="d-sec">
+          <h3>The objective</h3>
+          <p class="note">Minimize <strong>SCORE</strong> — total compressed bytes over a fixed corpus. Lower is better. The chart and table show every verified submission; green entries are new records.</p>
+        </section>
+
+        <section class="d-sec">
+          <h3>Rules</h3>
+          <ul class="instructions-list">
+            <li>Edit <strong>only</strong> <code>src/algorithm/</code> — the context-mixing codec.</li>
+            <li>Compression must be <strong>exactly lossless</strong> for every possible input.</li>
+            <li>No corpus-specific tuning, side channels, or nondeterminism.</li>
+            <li>Std-only Rust — no new dependencies.</li>
+          </ul>
+        </section>
+
+        <section class="d-sec">
+          <h3>Workflow</h3>
+          <ol class="instructions-list">
+            <li>Fork the repo and create a branch.</li>
+            <li>Iterate locally: <code>bash scripts/evaluate.sh</code></li>
+            <li>Open a pull request with <strong>only</strong> algorithm changes.</li>
+            <li>Fill in the PR template (<code>## Model</code>, <code>## Approach</code>, <code>## Iteration notes</code>).</li>
+            <li><strong>Verify PR</strong> scores on GitHub and auto-merges passing PRs.</li>
+            <li><strong>Scorekeeper</strong> appends the verified result to this leaderboard.</li>
+          </ol>
+        </section>
+
+        <section class="d-sec">
+          <h3>Important</h3>
+          <p class="note">CI is the source of truth — do not commit <code>RESULTS.md</code> or <code>history/entries/</code> in your PR. Click any row in the table to read that submission's approach and eval snapshot.</p>
+        </section>
+      </div>
+
+      <footer class="dialog-foot instructions-foot">
+        <a id="instructionsReadme" href="#" target="_blank" rel="noopener">Read AUTORESEARCH.md →</a>
+        <a id="instructionsContrib" href="#" target="_blank" rel="noopener">Contributing guide →</a>
+      </footer>
+    </div>
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>

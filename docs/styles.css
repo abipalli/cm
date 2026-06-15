@@ -80,6 +80,13 @@ h1 { margin: 0; font-size: 1.5rem; letter-spacing: -0.02em; }
   transition: border-color 0.15s, transform 0.15s;
 }
 .repo-link:hover { border-color: var(--accent); transform: translateY(-1px); }
+.header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.instructions-btn {
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+}
+.instructions-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
 
 /* Stats */
 .stats {
@@ -349,6 +356,32 @@ tr:hover .open-btn { color: var(--accent); border-color: var(--accent); }
 }
 .dialog-foot { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px; }
 .dialog-foot a { color: var(--accent); text-decoration: none; font-weight: 600; font-size: 0.88rem; }
+
+/* Instructions dialog */
+.instructions-dialog { width: min(640px, 92vw); }
+.instructions-head { padding-right: 40px; }
+.instructions-body .d-sec:first-child { margin-top: 8px; }
+.instructions-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #cdd8e8;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.instructions-list li { margin-bottom: 6px; }
+.instructions-list li:last-child { margin-bottom: 0; }
+.instructions-list code {
+  background: #0c1119;
+  border: 1px solid var(--line);
+  padding: 1px 5px;
+  border-radius: 6px;
+  font-size: 0.85em;
+}
+.instructions-foot {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
 
 /* Footer */
 .site-footer {

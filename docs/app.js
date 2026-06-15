@@ -213,6 +213,34 @@ function dialogSection(title, html) {
   return `<section class="d-sec"><h3>${title}</h3>${html}</section>`;
 }
 
+function setupDialog(dlg, { onClose } = {}) {
+  dlg.addEventListener("click", (ev) => {
+    if (ev.target === dlg) dlg.close();
+  });
+  dlg.addEventListener("close", () => {
+    if (onClose) onClose();
+  });
+}
+
+function bindDialogClose(root, dlg) {
+  const closeBtn = root.querySelector("[data-close]");
+  if (closeBtn) closeBtn.addEventListener("click", () => dlg.close());
+}
+
+function showDialog(dlg) {
+  if (typeof dlg.showModal === "function") dlg.showModal();
+  else dlg.setAttribute("open", "");
+  dlg.scrollTop = 0;
+}
+
+function openInstructions(repo) {
+  const base = `https://github.com/${repo}`;
+  $("#instructionsReadme").href = `${base}/blob/main/AUTORESEARCH.md`;
+  $("#instructionsContrib").href = `${base}/blob/main/CONTRIBUTING.md`;
+  showDialog($("#instructionsDialog"));
+  try { localStorage.setItem("cm-instructions-seen", "1"); } catch (_) {}
+}
+
 function openDialog(e, repo) {
   if (!e) return;
   const user = (e.author || "").replace(/^@/, "");
@@ -254,10 +282,8 @@ function openDialog(e, repo) {
     </footer>`;
 
   const dlg = $("#entryDialog");
-  $("#dialogInner").querySelector("[data-close]").addEventListener("click", () => dlg.close());
-  if (typeof dlg.showModal === "function") dlg.showModal();
-  else dlg.setAttribute("open", "");
-  dlg.scrollTop = 0;
+  bindDialogClose($("#dialogInner"), dlg);
+  showDialog(dlg);
   if (history.replaceState) history.replaceState(null, "", `#${e.id}`);
 }
 
@@ -273,14 +299,14 @@ async function main() {
       $("#generatedAt").textContent = `Updated ${new Date(data.generatedAt).toLocaleString()}`;
     }
 
-    const dlg = $("#entryDialog");
-    dlg.addEventListener("click", (ev) => {
-      // close when the backdrop (the dialog element itself) is clicked
-      if (ev.target === dlg) dlg.close();
+    setupDialog($("#entryDialog"), {
+      onClose: () => {
+        if (history.replaceState) history.replaceState(null, "", location.pathname + location.search);
+      },
     });
-    dlg.addEventListener("close", () => {
-      if (history.replaceState) history.replaceState(null, "", location.pathname + location.search);
-    });
+    setupDialog($("#instructionsDialog"));
+    bindDialogClose($("#instructionsDialog"), $("#instructionsDialog"));
+    $("#instructionsBtn").addEventListener("click", () => openInstructions(repo));
 
     renderStats(data);
     renderChart(data);
@@ -288,7 +314,13 @@ async function main() {
 
     // Deep link: #<entryId> opens that solution directly.
     const hashId = location.hash.replace(/^#/, "");
-    if (hashId && ENTRIES_BY_ID[hashId]) openDialog(ENTRIES_BY_ID[hashId], data.repo || "10d9e/cm");
+    if (hashId && ENTRIES_BY_ID[hashId]) {
+      openDialog(ENTRIES_BY_ID[hashId], repo);
+    } else {
+      let seen = false;
+      try { seen = localStorage.getItem("cm-instructions-seen") === "1"; } catch (_) {}
+      if (!seen) openInstructions(repo);
+    }
   } catch (err) {
     document.querySelector("main").innerHTML =
       `<div class="error">Could not load leaderboard data.<br><small>${escapeHtml(String(err))}</small></div>`;
