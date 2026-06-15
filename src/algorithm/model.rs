@@ -8,7 +8,7 @@
 
 use super::tables::{build, squash_d};
 
-const NCTX: usize = 88; // orders + word/n-gram + sparse + 2D + record + indirect + run + nest + hi-nibble + text shape/layout
+const NCTX: usize = 89; // orders + word/n-gram + sparse + 2D + record + indirect + run + nest + nibble + text shape/layout
 // Mixer input layout:
 //   [0 .. NCTX)            direct adaptive counters
 //   [SM_BASE .. SM_BASE+NCTX) bit-history StateMap predictions (one per context)
@@ -968,6 +968,12 @@ impl Cm {
         } else {
             hashk(0x7800, hn)
         };
+        // byte-delta context: differences between consecutive recent bytes —
+        // captures gradients/patterns in numeric and tabular data.
+        let d1 = (c4 & 0xff).wrapping_sub((c4 >> 8) & 0xff) & 0xff;
+        let d2 = ((c4 >> 8) & 0xff).wrapping_sub((c4 >> 16) & 0xff) & 0xff;
+        let d3 = ((c4 >> 16) & 0xff).wrapping_sub((c4 >> 24) & 0xff) & 0xff;
+        self.ctxhash[88] = hashk(0x7900, d1 | (d2 << 8) | (d3 << 16));
     }
 
     #[inline]
