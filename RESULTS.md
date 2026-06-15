@@ -42,6 +42,7 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0035 | 2026-06-15 | @10d9e | 578791 | -310 (new record) | +16.32% | `6236ca9` | [0035](history/entries/0035--10d9e.md) | Adds a sixth match model anchored on just the last 4 bytes. The existing match m… |
 | 0036 | 2026-06-15 | @10d9e | 578673 | -118 (new record) | +16.34% | `ec9792e` | [0036](history/entries/0036--10d9e.md) | Retunes the short match model added in the previous entry from an order-4 anchor… |
 | 0037 | 2026-06-15 | @10d9e | 578672 | -1 (new record) | +16.34% | `aa300ac` | [0037](history/entries/0037--10d9e.md) | Memory optimization. The six match-model hash tables were sized at 2^23..2^26 en… |
+| 0038 | 2026-06-15 | @10d9e | 578672 | 0 (tie) | +16.34% | `de442dd` | [0038](history/entries/0038--10d9e.md) | Memory optimization with provably identical output. The order-0 context model ha… |
 
 **Current record: 578672** (@10d9e, entry 0037)
 
