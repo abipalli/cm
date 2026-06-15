@@ -166,7 +166,8 @@ impl Mixer {
 pub struct Cm {
     stretch: Vec<i32>,
     squash: Vec<i32>,
-    cp: Vec<Vec<u16>>, // [NCTX][TSIZE] probabilities 0..4095
+    cp: Vec<Vec<i16>>, // probabilities stored as (prob - 2048); zero-init so only
+                       // touched table pages are committed (lazy RSS)
     cn: Vec<Vec<u8>>,  // [NCTX][TSIZE] observation counts
     st: Vec<Vec<u8>>,  // [NCTX][TSIZE] bit-history state per context slot
     sm: Vec<Vec<u32>>, // [NCTX][256*8] StateMap: (state | bitpos<<8) -> (prob22<<10 | count)
@@ -276,7 +277,7 @@ impl Cm {
         for i in 0..NCTX {
             tmask[i] = (1u32 << tb[i]) - 1;
         }
-        let cp: Vec<Vec<u16>> = (0..NCTX).map(|i| vec![2048u16; 1usize << tb[i]]).collect();
+        let cp: Vec<Vec<i16>> = (0..NCTX).map(|i| vec![0i16; 1usize << tb[i]]).collect();
         let cn: Vec<Vec<u8>> = (0..NCTX).map(|i| vec![0u8; 1usize << tb[i]]).collect();
         let st: Vec<Vec<u8>> = (0..NCTX).map(|i| vec![0u8; 1usize << tb[i]]).collect();
         let sm = (0..NCTX).map(|_| vec![1u32 << 31; 256 * 8]).collect();
@@ -928,7 +929,7 @@ impl Cm {
         for i in 0..NCTX {
             let ix = (self.ctxhash[i].wrapping_mul(769).wrapping_add(self.c0 as u32) & self.tmask[i]) as usize;
             self.idx[i] = ix;
-            self.mix_in[i] = self.stretch[self.cp[i][ix] as usize];
+            self.mix_in[i] = self.stretch[(self.cp[i][ix] as i32 + 2048) as usize];
             let mi = (self.st[i][ix] as usize) | ((self.bitcount as usize) << 8);
             self.sm_idx[i] = mi;
             let smp = (self.sm[i][mi] >> 20) as usize;
@@ -1174,8 +1175,8 @@ impl Cm {
         for i in 0..NCTX {
             let ix = self.idx[i];
             let n = self.cn[i][ix] as i32;
-            let pr = self.cp[i][ix] as i32;
-            self.cp[i][ix] = (pr + (((t - pr) * self.rate_tab[n as usize]) >> 12)) as u16;
+            let pr = self.cp[i][ix] as i32 + 2048;
+            self.cp[i][ix] = ((pr + (((t - pr) * self.rate_tab[n as usize]) >> 12)) - 2048) as i16;
             if n < CNT_LIMIT {
                 self.cn[i][ix] = (n + 1) as u8;
             }
