@@ -23,7 +23,8 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0016 | 2026-06-15 | @10d9e | 585739 | -1080 (new record) | +15.32% | `d7d4fec` | [0016](history/entries/0016--10d9e.md) | Two related SSE/APM improvements: 1. **Fourth APM/SSE stage keyed on match lengt… |
 | 0017 | 2026-06-15 | @10d9e | 585226 | -513 (new record) | +15.39% | `31d60b0` | [0017](history/entries/0017--10d9e.md) | Adds a second layer-2 combiner and averages it with the existing one in the logi… |
 | 0018 | 2026-06-15 | @10d9e | 584982 | -244 (new record) | +15.43% | `50f1f5e` | [0018](history/entries/0018--10d9e.md) | Re-tunes the layer-2 combiner learning rate from 4/65536 to 12/65536. The rate w… |
+| 0019 | 2026-06-15 | @10d9e | 584723 | -259 (new record) | +15.47% | `5611fb9` | [0019](history/entries/0019--10d9e.md) | Expands the layer-2 ensemble from two combiners to four, averaged in the logit d… |
 
-**Current record: 584982** (@10d9e, entry 0018)
+**Current record: 584723** (@10d9e, entry 0019)
 
 Ledger updates are **CI-only** — see [`.github/workflows/scorekeeper.yml`](.github/workflows/scorekeeper.yml).
