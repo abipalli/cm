@@ -9,7 +9,7 @@
 use super::dmc::Dmc;
 use super::tables::{build, build16, squash16_d, squash_d};
 
-const NCTX: usize = 103; // orders + word/n-gram + sparse + 2D + record + indirect + run + nest + nibble + text shape/layout
+const NCTX: usize = 106; // orders + word/n-gram + sparse + 2D + record + indirect + run + nest + nibble + text shape/layout
 // Mixer input layout:
 //   [0 .. NCTX)            direct adaptive counters
 //   [SM_BASE .. SM_BASE+NCTX) bit-history StateMap predictions (one per context)
@@ -318,6 +318,9 @@ pub struct Cm {
     follows4: Vec<u32>, // [65536] bytes that followed each stride-4 ctx
     followln8: Vec<u32>, // [FSIZE] bytes that followed each 8-byte low-nibble ctx
     followg14: Vec<u32>, // [65536] bytes that followed each gap(1,4) ctx
+    followcc8: Vec<u32>, // [65536] bytes that followed each 8-byte char-class ctx
+    follows5: Vec<u32>, // [65536] bytes that followed each stride-5 ctx
+    followg16: Vec<u32>, // [65536] bytes that followed each gap(1,6) ctx
     followw: Vec<u32>, // [65536] hashed: bytes that followed each word prefix
 }
 
@@ -555,6 +558,9 @@ impl Cm {
             follows4: vec![0u32; 65536],
             followln8: vec![0u32; FSIZE],
             followg14: vec![0u32; 65536],
+            followcc8: vec![0u32; 65536],
+            follows5: vec![0u32; 65536],
+            followg16: vec![0u32; 65536],
             followw: vec![0u32; 65536],
         }
     }
@@ -1225,6 +1231,33 @@ impl Cm {
             c4 & 0xffff
         };
         self.ctxhash[102] = hashk(0x8800, g14k ^ self.followg14[g14k as usize].wrapping_mul(0x85eb_ca6b));
+        // 8-byte char-class indirect: extends the char-class indirect to an
+        // 8-byte letter/digit/space/other pattern (text / source structure).
+        let cc8 = if self.pos >= 8 {
+            cls4(c4)
+                | (cls4((self.b(self.pos - 5) as u32)
+                    | ((self.b(self.pos - 6) as u32) << 8)
+                    | ((self.b(self.pos - 7) as u32) << 16)
+                    | ((self.b(self.pos - 8) as u32) << 24))
+                    << 8)
+        } else {
+            cls4(c4)
+        };
+        self.ctxhash[103] = hashk(0x8900, cc8 ^ self.followcc8[cc8 as usize].wrapping_mul(0xc2b2_ae35));
+        // Stride-5 indirect: the (pos-5, pos-10) pair plus its follow history.
+        let s5k = if self.pos >= 10 {
+            (self.b(self.pos - 5) as u32) | ((self.b(self.pos - 10) as u32) << 8)
+        } else {
+            c4 & 0xffff
+        };
+        self.ctxhash[104] = hashk(0x8A00, s5k ^ self.follows5[s5k as usize].wrapping_mul(0x27d4_eb2f));
+        // gap(1,6) indirect: the (last byte, byte six back) sparse pair + history.
+        let g16k = if self.pos >= 6 {
+            (c4 & 0xff) | ((self.b(self.pos - 6) as u32) << 8)
+        } else {
+            c4 & 0xffff
+        };
+        self.ctxhash[105] = hashk(0x8B00, g16k ^ self.followg16[g16k as usize].wrapping_mul(0x9e37_79b1));
     }
 
     #[inline]
@@ -1843,6 +1876,29 @@ impl Cm {
                     self.c4 & 0xffff
                 } as usize;
                 self.followg14[g14k] = (self.followg14[g14k] << 8) | byte as u32;
+                let cc8 = if self.pos >= 8 {
+                    cls4(self.c4)
+                        | (cls4((self.b(self.pos - 5) as u32)
+                            | ((self.b(self.pos - 6) as u32) << 8)
+                            | ((self.b(self.pos - 7) as u32) << 16)
+                            | ((self.b(self.pos - 8) as u32) << 24))
+                            << 8)
+                } else {
+                    cls4(self.c4)
+                } as usize;
+                self.followcc8[cc8] = (self.followcc8[cc8] << 8) | byte as u32;
+                let s5k = if self.pos >= 10 {
+                    (self.b(self.pos - 5) as u32) | ((self.b(self.pos - 10) as u32) << 8)
+                } else {
+                    self.c4 & 0xffff
+                } as usize;
+                self.follows5[s5k] = (self.follows5[s5k] << 8) | byte as u32;
+                let g16k = if self.pos >= 6 {
+                    (self.c4 & 0xff) | ((self.b(self.pos - 6) as u32) << 8)
+                } else {
+                    self.c4 & 0xffff
+                } as usize;
+                self.followg16[g16k] = (self.followg16[g16k] << 8) | byte as u32;
             }
             let bp = (self.pos & self.bufmask) as usize;
             self.buf[bp] = byte;
