@@ -24,6 +24,8 @@ const L2LR: i32 = 10; // layer-2 combiner learning rate
 const MIX3CTX: usize = 8192; // order-2 specialist rows
 const MIX4CTX: usize = 8192; // order-3 specialist rows
 const FBITS: u32 = 23; // indirect order-3/-4/-5/-6 follow-history hash table bits
+const WAYS: usize = 8; // set-associative ways for context tables
+const WAYS_LOG: u32 = 3; // log2(WAYS)
 const FSIZE: usize = 1 << FBITS;
 const MMBITS: u32 = 23;
 const MMSIZE: usize = 1 << MMBITS;
@@ -339,7 +341,7 @@ impl Cm {
         tb[0] = 9;
         for i in 0..NCTX {
             if assoc[i] {
-                tb[i] = 22; // 2^22 slots = 2^21 buckets x 2 ways
+                tb[i] = 22; // 2^22 slots = 2^19 buckets x 8 ways
             }
         }
         let mut tmask = [0u32; NCTX];
@@ -350,8 +352,8 @@ impl Cm {
         let mut cshift = [0u32; NCTX];
         for i in 0..NCTX {
             if assoc[i] {
-                bmask[i] = (1u32 << (tb[i] - 2)) - 1;
-                cshift[i] = tb[i] - 2;
+                bmask[i] = (1u32 << (tb[i] - WAYS_LOG)) - 1;
+                cshift[i] = tb[i] - WAYS_LOG;
             }
         }
         let cp: Vec<Vec<i16>> = (0..NCTX).map(|i| vec![0i16; 1usize << tb[i]]).collect();
@@ -1165,25 +1167,25 @@ impl Cm {
                 // 4-way set-associative: a context maps to a 4-slot bucket; pick the
                 // way whose checksum matches, else evict the lowest-count way. Keeps
                 // colliding contexts in separate warm slots without a bigger table.
-                let base = ((h & self.bmask[i]) << 2) as usize;
+                let base = ((h & self.bmask[i]) << WAYS_LOG) as usize;
                 let chk = (h >> self.cshift[i]) as u8;
-                if self.ck[i][base] == chk {
-                    base
-                } else if self.ck[i][base + 1] == chk {
-                    base + 1
-                } else if self.ck[i][base + 2] == chk {
-                    base + 2
-                } else if self.ck[i][base + 3] == chk {
-                    base + 3
-                } else {
-                    let mut w = base;
-                    let mut lo = self.cn[i][base];
-                    for k in 1..4 {
-                        if self.cn[i][base + k] < lo {
-                            lo = self.cn[i][base + k];
-                            w = base + k;
-                        }
+                let mut sel = usize::MAX;
+                let mut w = base;
+                let mut lo = self.cn[i][base];
+                for k in 0..WAYS {
+                    let s = base + k;
+                    if self.ck[i][s] == chk {
+                        sel = s;
+                        break;
                     }
+                    if self.cn[i][s] < lo {
+                        lo = self.cn[i][s];
+                        w = s;
+                    }
+                }
+                if sel != usize::MAX {
+                    sel
+                } else {
                     self.ck[i][w] = chk;
                     self.cp[i][w] = 0;
                     self.cn[i][w] = 0;
