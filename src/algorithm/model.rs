@@ -197,9 +197,13 @@ pub struct Cm {
                        // touched table pages are committed (lazy RSS)
     cn: Vec<Vec<u8>>,  // [NCTX][TSIZE] observation counts
     st: Vec<Vec<u8>>,  // [NCTX][TSIZE] bit-history state per context slot
+    ck: Vec<Vec<u8>>,  // [NCTX][TSIZE] checksum byte per slot (assoc models only; else empty)
     sm: Vec<Vec<u32>>, // [NCTX][256*8] StateMap: (state | bitpos<<8) -> (prob22<<10 | count)
     sm_idx: [usize; NCTX],
     tmask: [u32; NCTX], // per-model context-table index mask
+    assoc: [bool; NCTX], // model uses 2-way set-associative buckets
+    bmask: [u32; NCTX],  // bucket-index mask for associative models (2^(tb-1) - 1)
+    cshift: [u32; NCTX], // checksum shift for associative models (tb - 1)
     rate_tab: [i32; 256],
     ctxhash: [u32; NCTX],
     idx: [usize; NCTX],
@@ -315,22 +319,47 @@ impl Cm {
         // except order-0 (ctxhash[0] == 0), whose index is just the partial-byte
         // c0 (<=255); a 512-slot table is byte-for-byte identical there, saving
         // ~32 MB at zero cost to compression.
+        // 2-way set-associative tables for the high-cardinality models (the dense
+        // orders, sparse/stride banks, and indirect families). Each context maps
+        // to a 2-slot bucket distinguished by an 8-bit checksum; colliding contexts
+        // occupy separate warm slots instead of polluting one, recovering most of
+        // the loss that a 4x-bigger direct table would. Because associativity
+        // resolves collisions, the associative data tables can be SMALLER (2^22)
+        // than the old direct ones (2^23) and still beat them — so this is also
+        // net memory-negative. Low-cardinality models (order-0/1/2, bytes-2-3,
+        // char-class) gain nothing and stay direct-mapped.
+        let mut assoc = [false; NCTX];
+        for i in 0..NCTX {
+            let small = i == 0 || i == 1 || i == 2 || i == 8 || i == 93;
+            if !small {
+                assoc[i] = true;
+            }
+        }
         let mut tb = [TBITS; NCTX];
         tb[0] = 9;
-        // The lower-order indirect-on-transform context models (slots 94..=98:
-        // low-nibble, gap, stride-2/3, wide-gap) are low-collision, so a smaller
-        // 2^22 table is nearly lossless (cost ~26 bytes) and keeps the model
-        // bank's committed memory within the CI runner's budget.
-        for i in 94..=98 {
-            tb[i] = 22;
+        for i in 0..NCTX {
+            if assoc[i] {
+                tb[i] = 22; // 2^22 slots = 2^21 buckets x 2 ways
+            }
         }
         let mut tmask = [0u32; NCTX];
         for i in 0..NCTX {
             tmask[i] = (1u32 << tb[i]) - 1;
         }
+        let mut bmask = [0u32; NCTX];
+        let mut cshift = [0u32; NCTX];
+        for i in 0..NCTX {
+            if assoc[i] {
+                bmask[i] = (1u32 << (tb[i] - 2)) - 1;
+                cshift[i] = tb[i] - 2;
+            }
+        }
         let cp: Vec<Vec<i16>> = (0..NCTX).map(|i| vec![0i16; 1usize << tb[i]]).collect();
         let cn: Vec<Vec<u8>> = (0..NCTX).map(|i| vec![0u8; 1usize << tb[i]]).collect();
         let st: Vec<Vec<u8>> = (0..NCTX).map(|i| vec![0u8; 1usize << tb[i]]).collect();
+        let ck: Vec<Vec<u8>> = (0..NCTX)
+            .map(|i| if assoc[i] { vec![0u8; 1usize << tb[i]] } else { Vec::new() })
+            .collect();
         let sm = (0..NCTX).map(|_| vec![1u32 << 31; 256 * 8]).collect();
         let q = L1LR;
         let l1 = vec![
@@ -390,9 +419,13 @@ impl Cm {
             cp,
             cn,
             st,
+            ck,
             sm,
             sm_idx: [0; NCTX],
             tmask,
+            assoc,
+            bmask,
+            cshift,
             rate_tab,
             ctxhash: [0; NCTX],
             idx: [0; NCTX],
@@ -1127,7 +1160,39 @@ impl Cm {
     #[inline]
     pub fn predict(&mut self) -> i32 {
         for i in 0..NCTX {
-            let ix = (self.ctxhash[i].wrapping_mul(769).wrapping_add(self.c0 as u32) & self.tmask[i]) as usize;
+            let h = self.ctxhash[i].wrapping_mul(769).wrapping_add(self.c0 as u32);
+            let ix = if self.assoc[i] {
+                // 4-way set-associative: a context maps to a 4-slot bucket; pick the
+                // way whose checksum matches, else evict the lowest-count way. Keeps
+                // colliding contexts in separate warm slots without a bigger table.
+                let base = ((h & self.bmask[i]) << 2) as usize;
+                let chk = (h >> self.cshift[i]) as u8;
+                if self.ck[i][base] == chk {
+                    base
+                } else if self.ck[i][base + 1] == chk {
+                    base + 1
+                } else if self.ck[i][base + 2] == chk {
+                    base + 2
+                } else if self.ck[i][base + 3] == chk {
+                    base + 3
+                } else {
+                    let mut w = base;
+                    let mut lo = self.cn[i][base];
+                    for k in 1..4 {
+                        if self.cn[i][base + k] < lo {
+                            lo = self.cn[i][base + k];
+                            w = base + k;
+                        }
+                    }
+                    self.ck[i][w] = chk;
+                    self.cp[i][w] = 0;
+                    self.cn[i][w] = 0;
+                    self.st[i][w] = 0;
+                    w
+                }
+            } else {
+                (h & self.tmask[i]) as usize
+            };
             self.idx[i] = ix;
             self.mix_in[i] = self.stretch[(self.cp[i][ix] as i32 + 2048) as usize];
             let mi = (self.st[i][ix] as usize) | ((self.bitcount as usize) << 8);
