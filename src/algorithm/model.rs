@@ -45,6 +45,18 @@ const APM_S: usize = 33;
 const CNT_LIMIT: i32 = 254;
 const RATE_FLOOR: i32 = 40;
 
+/// One context-table slot, packed to 5 bytes so an 8-way bucket fits in a single
+/// cache line (array-of-structs). Fields: `cp` probability-2048, `cn` count,
+/// `st` bit-history state, `ck` collision checksum (associative models only).
+#[derive(Clone, Copy)]
+#[repr(C, packed)]
+struct Slot {
+    cp: i16,
+    cn: u8,
+    st: u8,
+    ck: u8,
+}
+
 #[inline]
 fn hashk(h: u32, x: u32) -> u32 {
     h.wrapping_add(x).wrapping_add(1).wrapping_mul(2654435761)
@@ -203,11 +215,9 @@ pub struct Cm {
     squash: Vec<i32>,
     stretch16: Vec<i32>,
     squash16: Vec<i32>,
-    cp: Vec<Vec<i16>>, // probabilities stored as (prob - 2048); zero-init so only
-                       // touched table pages are committed (lazy RSS)
-    cn: Vec<Vec<u8>>,  // [NCTX][TSIZE] observation counts
-    st: Vec<Vec<u8>>,  // [NCTX][TSIZE] bit-history state per context slot
-    ck: Vec<Vec<u8>>,  // [NCTX][TSIZE] checksum byte per slot (assoc models only; else empty)
+    // Per-context slots stored array-of-structs (one packed 5-byte Slot) so a
+    // bucket access touches a single cache line instead of four separate arrays.
+    tab: Vec<Vec<Slot>>, // [NCTX][TSIZE]
     sm: Vec<Vec<u32>>, // [NCTX][256*8] StateMap: (state | bitpos<<8) -> (prob22<<10 | count)
     sm_idx: [usize; NCTX],
     tmask: [u32; NCTX], // per-model context-table index mask
@@ -380,11 +390,8 @@ impl Cm {
                 cshift[i] = tb[i] - WAYS_LOG;
             }
         }
-        let cp: Vec<Vec<i16>> = (0..NCTX).map(|i| vec![0i16; 1usize << tb[i]]).collect();
-        let cn: Vec<Vec<u8>> = (0..NCTX).map(|i| vec![0u8; 1usize << tb[i]]).collect();
-        let st: Vec<Vec<u8>> = (0..NCTX).map(|i| vec![0u8; 1usize << tb[i]]).collect();
-        let ck: Vec<Vec<u8>> = (0..NCTX)
-            .map(|i| if assoc[i] { vec![0u8; 1usize << tb[i]] } else { Vec::new() })
+        let tab: Vec<Vec<Slot>> = (0..NCTX)
+            .map(|i| vec![Slot { cp: 0, cn: 0, st: 0, ck: 0 }; 1usize << tb[i]])
             .collect();
         let sm = (0..NCTX).map(|_| vec![1u32 << 31; 256 * 8]).collect();
         let q = L1LR;
@@ -444,10 +451,7 @@ impl Cm {
             squash,
             stretch16,
             squash16,
-            cp,
-            cn,
-            st,
-            ck,
+            tab,
             sm,
             sm_idx: [0; NCTX],
             tmask,
@@ -1264,41 +1268,40 @@ impl Cm {
     pub fn predict(&mut self) -> i32 {
         for i in 0..NCTX {
             let h = self.ctxhash[i].wrapping_mul(769).wrapping_add(self.c0 as u32);
+            let row = &mut self.tab[i];
             let ix = if self.assoc[i] {
-                // 4-way set-associative: a context maps to a 4-slot bucket; pick the
-                // way whose checksum matches, else evict the lowest-count way. Keeps
-                // colliding contexts in separate warm slots without a bigger table.
+                // N-way set-associative: a context maps to a bucket of WAYS slots;
+                // pick the way whose checksum matches, else evict the lowest-count
+                // way. The whole bucket lives in ~one cache line (array-of-structs).
                 let base = ((h & self.bmask[i]) << WAYS_LOG) as usize;
                 let chk = (h >> self.cshift[i]) as u8;
                 let mut sel = usize::MAX;
                 let mut w = base;
-                let mut lo = self.cn[i][base];
+                let mut lo = row[base].cn;
                 for k in 0..WAYS {
                     let s = base + k;
-                    if self.ck[i][s] == chk {
+                    if row[s].ck == chk {
                         sel = s;
                         break;
                     }
-                    if self.cn[i][s] < lo {
-                        lo = self.cn[i][s];
+                    if row[s].cn < lo {
+                        lo = row[s].cn;
                         w = s;
                     }
                 }
                 if sel != usize::MAX {
                     sel
                 } else {
-                    self.ck[i][w] = chk;
-                    self.cp[i][w] = 0;
-                    self.cn[i][w] = 0;
-                    self.st[i][w] = 0;
+                    row[w] = Slot { cp: 0, cn: 0, st: 0, ck: chk };
                     w
                 }
             } else {
                 (h & self.tmask[i]) as usize
             };
             self.idx[i] = ix;
-            self.mix_in[i] = self.stretch[(self.cp[i][ix] as i32 + 2048) as usize];
-            let mi = (self.st[i][ix] as usize) | ((self.bitcount as usize) << 8);
+            let slot = row[ix];
+            self.mix_in[i] = self.stretch[(slot.cp as i32 + 2048) as usize];
+            let mi = (slot.st as usize) | ((self.bitcount as usize) << 8);
             self.sm_idx[i] = mi;
             let smp = (self.sm[i][mi] >> 20) as usize;
             self.mix_in[SM_BASE + i] = self.stretch[smp];
@@ -1711,11 +1714,11 @@ impl Cm {
         self.l2j.update(bit, &self.l2_in);
         for i in 0..NCTX {
             let ix = self.idx[i];
-            let n = self.cn[i][ix] as i32;
-            let pr = self.cp[i][ix] as i32 + 2048;
-            self.cp[i][ix] = ((pr + (((t - pr) * self.rate_tab[n as usize]) >> 12)) - 2048) as i16;
+            let n = self.tab[i][ix].cn as i32;
+            let pr = self.tab[i][ix].cp as i32 + 2048;
+            self.tab[i][ix].cp = ((pr + (((t - pr) * self.rate_tab[n as usize]) >> 12)) - 2048) as i16;
             if n < CNT_LIMIT {
-                self.cn[i][ix] = (n + 1) as u8;
+                self.tab[i][ix].cn = (n + 1) as u8;
             }
             // StateMap: adapt prob for the observed bit-history state, then
             // advance that state. prob is 22-bit fixed point in the high bits,
@@ -1727,7 +1730,7 @@ impl Cm {
             let newp = p22 + (((bit << 22) - p22) / (cnt + 2));
             let newcnt = if cnt < 511 { cnt + 1 } else { 511 };
             self.sm[i][s] = ((newp as u32) << 10) | (newcnt as u32);
-            self.st[i][ix] = next_state(s as u8, bit);
+            self.tab[i][ix].st = next_state(s as u8, bit);
         }
         self.c0 = (self.c0 << 1) | bit;
         self.bitcount += 1;
