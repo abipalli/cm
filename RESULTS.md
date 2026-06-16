@@ -59,7 +59,8 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0052 | 2026-06-16 | @10d9e | 575084 | -76 (new record) | +16.86% | `73d0d7e` | [0052](history/entries/0052--10d9e.md) | Follow-on mixer tuning that exploits the richer per-bit input set created by the… |
 | 0053 | 2026-06-16 | @10d9e | 574203 | -881 (new record) | +16.99% | `f3fee9e` | [0053](history/entries/0053--10d9e.md) | Replaces direct-mapped context hash tables with 4-way set-associative buckets fo… |
 | 0054 | 2026-06-16 | @10d9e | 574135 | -68 (new record) | +17.00% | `dd3f50b` | [0054](history/entries/0054--10d9e.md) | Widens the set-associative context tables (added in the previous record) from 4 … |
+| 0055 | 2026-06-16 | @10d9e | 573541 | -594 (new record) | +17.08% | `9c85361` | [0055](history/entries/0055--10d9e.md) | Raises the prediction/coding precision from 12-bit to 16-bit through the final S… |
 
-**Current record: 574135** (@10d9e, entry 0054)
+**Current record: 573541** (@10d9e, entry 0055)
 
 Ledger updates are **CI-only** — see [`.github/workflows/scorekeeper.yml`](.github/workflows/scorekeeper.yml).
