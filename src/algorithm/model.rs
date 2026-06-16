@@ -6,6 +6,7 @@
 //! lossless on all inputs and the predict/update sequence stays identical
 //! between encode and decode.
 
+use super::lstm::Lstm;
 use super::tables::{build, build16, squash16_d, squash_d};
 
 const NCTX: usize = 99; // orders + word/n-gram + sparse + 2D + record + indirect + run + nest + nibble + text shape/layout
@@ -15,7 +16,8 @@ const NCTX: usize = 99; // orders + word/n-gram + sparse + 2D + record + indirec
 //   [MM_BASE .. MM_BASE+5)  five match models (order-6, -8, -10, -12, -14)
 const SM_BASE: usize = NCTX;
 const MM_BASE: usize = 2 * NCTX;
-const NINPUT: usize = 2 * NCTX + 6;
+const LSTM_IN: usize = 2 * NCTX + 6; // recurrent-mixer prediction (one extra input)
+const NINPUT: usize = 2 * NCTX + 7;
 const TBITS: u32 = 23; // default per-model context-table size (2^TBITS slots)
 const MIXCTX: usize = 16384;
 const NL1: usize = 27; // number of layer-1 specialist mixers
@@ -277,6 +279,7 @@ pub struct Cm {
     apm2: Apm,
     apm3: Apm,
     apm4: Apm,
+    lstm: Lstm,
     c0: i32,
     bitcount: i32,
     c4: u32,
@@ -509,6 +512,7 @@ impl Cm {
             apm2,
             apm3,
             apm4,
+            lstm: Lstm::new(),
             c0: 1,
             bitcount: 0,
             c4: 0,
@@ -1302,6 +1306,8 @@ impl Cm {
                 self.matchlen6 = 0;
             }
         }
+        // Recurrent (reservoir) bit predictor — one extra mixer input.
+        self.mix_in[LSTM_IN] = self.lstm.predict();
         // Layer-1 specialist mixers, each selected by a different context:
         //   m0 — the proven last-byte + match-activity context (full resolution)
         //   m1 — the within-byte partial-byte context (order-0 bit position)
@@ -1342,14 +1348,14 @@ impl Cm {
         self.l2_in[8] = self.l1[8].mix(&self.mix_in, &self.squash, ctx8);
         // stride-2 sparse selector: bytes at pos-2 and pos-4 (interleaved structure).
         let ctx9 = if self.pos >= 4 {
-            ((self.b(self.pos - 2) as usize) | ((self.b(self.pos - 4) as usize) << 8))
+            (self.b(self.pos - 2) as usize) | ((self.b(self.pos - 4) as usize) << 8)
         } else {
             self.c1 as usize
         };
         self.l2_in[9] = self.l1[9].mix(&self.mix_in, &self.squash, ctx9);
         // stride-3 sparse selector: bytes at pos-3 and pos-6.
         let ctx10 = if self.pos >= 6 {
-            ((self.b(self.pos - 3) as usize) | ((self.b(self.pos - 6) as usize) << 8))
+            (self.b(self.pos - 3) as usize) | ((self.b(self.pos - 6) as usize) << 8)
         } else {
             self.c1 as usize
         };
@@ -1560,6 +1566,7 @@ impl Cm {
         self.apm2.update(bit);
         self.apm3.update(bit);
         self.apm4.update(bit);
+        self.lstm.update(bit);
         if self.mm_used {
             let v = self.mm_sm[self.mm_idx] as i32;
             self.mm_sm[self.mm_idx] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 6)) as u16;
