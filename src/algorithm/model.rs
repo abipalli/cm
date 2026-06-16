@@ -6,7 +6,7 @@
 //! lossless on all inputs and the predict/update sequence stays identical
 //! between encode and decode.
 
-use super::tables::{build, squash_d};
+use super::tables::{build, build16, squash16_d, squash_d};
 
 const NCTX: usize = 99; // orders + word/n-gram + sparse + 2D + record + indirect + run + nest + nibble + text shape/layout
 // Mixer input layout:
@@ -110,17 +110,21 @@ impl Apm {
         Apm { t, idx: 0 }
     }
 
+    /// 16-bit SSE/APM step: takes a 16-bit probability `p`, stretches it via the
+    /// 16-bit table, interpolates the (16-bit) calibration table, and returns a
+    /// 16-bit probability. Keeps the whole final chain at 16 bits so confident
+    /// predictions are not re-quantized to the 12-bit 1/4096 grid.
     #[inline]
-    fn apply(&mut self, stretch: &[i32], ctx: usize, p: i32) -> i32 {
-        let s = stretch[p as usize] + 2048; // 0..4095
+    fn apply16(&mut self, stretch16: &[i32], ctx: usize, p: i32) -> i32 {
+        let s = stretch16[p as usize] + 2048; // 0..4095
         let w = s & 127;
-        let j = (s >> 7) as usize; // 0..31
+        let j = (s >> 7) as usize;
         self.idx = ctx * APM_S + j;
         let lo = self.t[self.idx] as i32;
         let hi = self.t[self.idx + 1] as i32;
-        let mut pp = (lo * (128 - w) + hi * w) >> 11;
+        let mut pp = (lo * (128 - w) + hi * w) >> 7;
         if pp < 1 { pp = 1; }
-        if pp > 4094 { pp = 4094; }
+        if pp > 65534 { pp = 65534; }
         pp
     }
 
@@ -195,6 +199,8 @@ impl Mixer {
 pub struct Cm {
     stretch: Vec<i32>,
     squash: Vec<i32>,
+    stretch16: Vec<i32>,
+    squash16: Vec<i32>,
     cp: Vec<Vec<i16>>, // probabilities stored as (prob - 2048); zero-init so only
                        // touched table pages are committed (lazy RSS)
     cn: Vec<Vec<u8>>,  // [NCTX][TSIZE] observation counts
@@ -311,6 +317,7 @@ pub struct Cm {
 impl Cm {
     pub fn new(expected_len: usize) -> Self {
         let (stretch, squash) = build();
+        let (stretch16, squash16) = build16();
         let mut rate_tab = [0i32; 256];
         for n in 0..256 {
             let mut r = 4096 / (n as i32 + 2);
@@ -418,6 +425,8 @@ impl Cm {
         Cm {
             stretch,
             squash,
+            stretch16,
+            squash16,
             cp,
             cn,
             st,
@@ -1500,37 +1509,40 @@ impl Cm {
         let l2jctx = (dsmsel & 0xff)
             | ((dsign(self.c4 >> 8, self.c4 >> 16)) << 6);
         let d2j = self.l2j.mix(&self.l2_in, &self.squash, l2jctx & 0xff);
-        let mut p = squash_d(
-            &self.squash,
+        // Squash the combined logit straight to 16-bit and run the whole SSE/APM
+        // chain at 16-bit precision (the calibration tables are ~16-bit), so no
+        // stage re-quantizes the probability to the 12-bit 1/4096 grid.
+        let mut p = squash16_d(
+            &self.squash16,
             (d2a + d2b + d2c + d2d + d2e + d2f + d2g + d2h + d2i + d2j) / 10,
         );
         if p < 1 { p = 1; }
-        if p > 4094 { p = 4094; }
+        if p > 65534 { p = 65534; }
 
         let a1ctx = ((self.c1 | (if self.matchlen > 0 { 256 } else { 0 })) as usize) & 1023;
-        let a1 = self.apm1.apply(&self.stretch, a1ctx, p);
+        let a1 = self.apm1.apply16(&self.stretch16, a1ctx, p);
         p = (p + a1) >> 1;
         if p < 1 { p = 1; }
-        if p > 4094 { p = 4094; }
-        let a2 = self.apm2.apply(&self.stretch, (self.c4 & 0x3fff) as usize, p);
+        if p > 65534 { p = 65534; }
+        let a2 = self.apm2.apply16(&self.stretch16, (self.c4 & 0x3fff) as usize, p);
         p = (p + a2) >> 1;
         if p < 1 { p = 1; }
-        if p > 4094 { p = 4094; }
+        if p > 65534 { p = 65534; }
         let a3ctx = (self.c0 as usize)
             | (if self.matchlen > 0 { 256 } else { 0 })
             | (if self.matchlen3 > 0 { 512 } else { 0 });
-        let a3 = self.apm3.apply(&self.stretch, a3ctx, p);
+        let a3 = self.apm3.apply16(&self.stretch16, a3ctx, p);
         p = (p + a3) >> 1;
         if p < 1 { p = 1; }
-        if p > 4094 { p = 4094; }
+        if p > 65534 { p = 65534; }
         // Match-length SSE: calibrate by how long the current order-6 match runs.
         let a4ctx = ((self.matchlen as usize) & 0xff)
             | (if self.matchlen3 > 0 { 256 } else { 0 })
             | (if self.matchlen4 > 0 { 512 } else { 0 });
-        let a4 = self.apm4.apply(&self.stretch, a4ctx, p);
+        let a4 = self.apm4.apply16(&self.stretch16, a4ctx, p);
         p = (3 * p + a4) >> 2;
         if p < 1 { p = 1; }
-        if p > 4094 { p = 4094; }
+        if p > 65534 { p = 65534; }
         p
     }
 

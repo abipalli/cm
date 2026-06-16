@@ -17,9 +17,9 @@ impl Encoder {
     #[inline]
     pub fn encode(&mut self, mut p: i32, bit: i32) {
         if p < 1 { p = 1; }
-        if p > 4094 { p = 4094; }
+        if p > 65534 { p = 65534; }
         let range = (self.x2 - self.x1) as u64;
-        let xmid = self.x1.wrapping_add(((range * p as u64) >> 12) as u32);
+        let xmid = self.x1.wrapping_add(((range * p as u64) >> 16) as u32);
         if bit != 0 { self.x2 = xmid; } else { self.x1 = xmid + 1; }
         while (self.x1 ^ self.x2) & 0xff00_0000 == 0 {
             self.out.push((self.x2 >> 24) as u8);
@@ -68,9 +68,9 @@ impl<'a> Decoder<'a> {
     #[inline]
     pub fn decode(&mut self, mut p: i32) -> i32 {
         if p < 1 { p = 1; }
-        if p > 4094 { p = 4094; }
+        if p > 65534 { p = 65534; }
         let range = (self.x2 - self.x1) as u64;
-        let xmid = self.x1.wrapping_add(((range * p as u64) >> 12) as u32);
+        let xmid = self.x1.wrapping_add(((range * p as u64) >> 16) as u32);
         let bit = if self.x <= xmid { 1 } else { 0 };
         if bit != 0 { self.x2 = xmid; } else { self.x1 = xmid + 1; }
         while (self.x1 ^ self.x2) & 0xff00_0000 == 0 {
