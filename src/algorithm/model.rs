@@ -16,8 +16,9 @@ const NCTX: usize = 106; // orders + word/n-gram + sparse + 2D + record + indire
 //   [MM_BASE .. MM_BASE+5)  five match models (order-6, -8, -10, -12, -14)
 const SM_BASE: usize = NCTX;
 const MM_BASE: usize = 2 * NCTX;
-const DMC_IN: usize = 2 * NCTX + 6; // DMC variable-order prediction (one extra input)
-const NINPUT: usize = 2 * NCTX + 7;
+const DMC_IN: usize = 2 * NCTX + 6; // DMC (fast clone) variable-order prediction
+const DMC2_IN: usize = 2 * NCTX + 7; // DMC (slow clone) variable-order prediction
+const NINPUT: usize = 2 * NCTX + 8;
 const TBITS: u32 = 23; // default per-model context-table size (2^TBITS slots)
 const MIXCTX: usize = 16384;
 const NL1: usize = 27; // number of layer-1 specialist mixers
@@ -290,6 +291,7 @@ pub struct Cm {
     apm3: Apm,
     apm4: Apm,
     dmc: Dmc,
+    dmc2: Dmc,
     c0: i32,
     bitcount: i32,
     c4: u32,
@@ -523,7 +525,8 @@ impl Cm {
             apm2,
             apm3,
             apm4,
-            dmc: Dmc::new(),
+            dmc: Dmc::new(2, 2),
+            dmc2: Dmc::new(8, 8),
             c0: 1,
             bitcount: 0,
             c4: 0,
@@ -1392,6 +1395,7 @@ impl Cm {
         }
         // DMC variable-order Markov prediction — one extra mixer input.
         self.mix_in[DMC_IN] = self.dmc.predict(&self.stretch);
+        self.mix_in[DMC2_IN] = self.dmc2.predict(&self.stretch);
         // Layer-1 specialist mixers, each selected by a different context:
         //   m0 — the proven last-byte + match-activity context (full resolution)
         //   m1 — the within-byte partial-byte context (order-0 bit position)
@@ -1651,6 +1655,7 @@ impl Cm {
         self.apm3.update(bit);
         self.apm4.update(bit);
         self.dmc.update(bit);
+        self.dmc2.update(bit);
         if self.mm_used {
             let v = self.mm_sm[self.mm_idx] as i32;
             self.mm_sm[self.mm_idx] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 6)) as u16;

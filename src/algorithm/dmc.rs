@@ -16,8 +16,6 @@
 //! a down-weightable mixer input, so if it fails to help the mixer ignores it.
 
 const MAXN: usize = 1 << 22; // node cap (~64 MB at 16 B/node); freeze growth when hit
-const T1: u32 = 2; // min count on the taken edge before it may clone its target
-const T2: u32 = 2; // min residual count on the target (reached from elsewhere too)
 
 struct Node {
     nx: [u32; 2], // next state for an observed 0 / 1
@@ -28,10 +26,15 @@ pub struct Dmc {
     nodes: Vec<Node>,
     n: u32,    // number of allocated nodes
     curr: u32, // current state
+    t1: u32,   // min count on the taken edge before it may clone its target
+    t2: u32,   // min residual count on the target (reached from elsewhere too)
 }
 
 impl Dmc {
-    pub fn new() -> Self {
+    /// `t1`/`t2` are the clone thresholds: small values clone aggressively (fast,
+    /// high-order specialization); larger values stay lower-order longer (slower,
+    /// more stable). Running two instances at different speeds is complementary.
+    pub fn new(t1: u32, t2: u32) -> Self {
         // Initial graph: a depth-8 binary tree over the bits of one byte, so the
         // model starts as a plain order-0 byte model; leaves loop back to the root
         // to begin the next byte. index(k,p) = (2^k - 1) + p for prefix p of k bits.
@@ -49,7 +52,7 @@ impl Dmc {
             }
         }
         let n = nodes.len() as u32; // 255
-        Dmc { nodes, n, curr: 0 }
+        Dmc { nodes, n, curr: 0, t1, t2 }
     }
 
     /// Smoothed P(bit=1) at the current state, returned as a stretched logit.
@@ -75,7 +78,7 @@ impl Dmc {
         let edge = self.nodes[s].c[b];
         let tot = self.nodes[nu].c[0] + self.nodes[nu].c[1];
 
-        let target = if edge >= T1 && tot >= edge + T2 && (self.n as usize) < MAXN {
+        let target = if edge >= self.t1 && tot >= edge + self.t2 && (self.n as usize) < MAXN {
             // Clone `next`: the new node inherits next's transitions and a share of
             // its counts proportional to how much of next's traffic came via `edge`.
             let nx0 = self.nodes[nu].nx[0];
