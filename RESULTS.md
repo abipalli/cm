@@ -62,6 +62,7 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0055 | 2026-06-16 | @10d9e | 573541 | -594 (new record) | +17.08% | `9c85361` | [0055](history/entries/0055--10d9e.md) | Raises the prediction/coding precision from 12-bit to 16-bit through the final S… |
 | 0056 | 2026-06-16 | @abipalli | 573376 | -165 (new record) | +17.11% | `6491617` | [0056](history/entries/0056--abipalli.md) | Size context tables to input length (recover the CI-blocked table-growth win) Th… |
 | 0057 | 2026-06-16 | @10d9e | 572769 | -607 (new record) | +17.19% | `9b3433b` | [0057](history/entries/0057--10d9e.md) | Continues extending the indirect-on-transform family (each model hashes a byte-t… |
+| 0058 | 2026-06-16 | @10d9e | 572769 | 0 (tie) | +17.19% | `e847a4b` | [0058](history/entries/0058--10d9e.md) | Pure efficiency change: SCORE is byte-for-byte identical (572769); the codec is … |
 
 **Current record: 572769** (@10d9e, entry 0057)
 
