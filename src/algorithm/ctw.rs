@@ -86,8 +86,17 @@ pub struct Ctw {
     // (predict first), so these are fresh when update runs.
     spath: [Node; DEPTH + 1], // path node at each depth 0..=DEPTH
     ssib: [f64; DEPTH],       // sibling lw used at depth d (d in 0..DEPTH)
+    skey: [u64; DEPTH + 1],   // map key per depth, computed once in predict and reused by update
     ln_half: f64,             // ln(0.5), computed once; reused for the KT update when n0==n1
     ln2: f64,                 // ln(2), computed once; the value ln_add adds when its args are equal
+    // Until the node store hits its cap, the path's *present* nodes form a prefix
+    // {0..=frontier} of the depth axis (a context can only have been inserted if all
+    // its suffixes were), so `predict` probes top-down only until the first absent
+    // depth: the deeper tail is provably empty and contributes pred = 0.5 with no
+    // map probes. Once an insert is refused the prefix invariant can break (a parent
+    // may be absent while a child exists), so this flips and `predict` reverts to the
+    // full leaf→root walk — byte-identical to the unskipped recursion on every input.
+    capped: bool,
 }
 
 impl Ctw {
@@ -97,10 +106,12 @@ impl Ctw {
             hist: 0,
             spath: [Node::empty(); DEPTH + 1],
             ssib: [0.0; DEPTH],
+            skey: [0; DEPTH + 1],
             // Same value `0.5_f64.ln()` would yield in the hot loop, computed once.
             ln_half: 0.5_f64.ln(),
             // ln(2) == `1.0_f64.ln_1p()`, the value `ln_add(a, a)` adds; computed once.
             ln2: 1.0_f64.ln_1p(),
+            capped: false,
         }
     }
 
@@ -117,38 +128,101 @@ impl Ctw {
         *self.nodes.get(&Self::key(depth, ctx)).unwrap_or(&Node::empty())
     }
 
+    #[inline]
+    fn ctx_at(&self, d: usize, mask_d: u64) -> u64 {
+        if d == DEPTH { self.hist & mask_d } else { self.hist & ((1u64 << d) - 1) }
+    }
+
+    /// One bottom-up CTW mixing step at depth `d`: blend node `nd`'s KT estimate with
+    /// the deeper prediction `pred` by the CTW weight, using the on-path child lw
+    /// `onpath_lw` and the sibling lw `sib_lw`. Returns the updated prediction.
+    #[inline]
+    fn step(pred: f64, nd: &Node, onpath_lw: f64, sib_lw: f64) -> f64 {
+        let lpc = onpath_lw + sib_lw; // ln Pw(s0)Pw(s1)
+        // alpha = Pe / (Pe + Pc) = 1 / (1 + e^{lpc - lpe}). When the exponent is
+        // exactly 0 (an empty node with empty children, e.g. the deep unseen tail)
+        // e^0 == 1, so alpha is exactly 0.5 — skip the expensive transcendental.
+        let arg = lpc - nd.lpe;
+        let alpha = if arg == 0.0 { 0.5 } else { 1.0 / (1.0 + arg.exp()) };
+        alpha * nd.kt_p1() + (1.0 - alpha) * pred
+    }
+
     /// CTW predictive P(bit = 1) at the current context, as a stretched logit.
     #[inline]
     pub fn predict(&mut self, stretch: &[i32]) -> i32 {
-        // Walk up from the depth-D leaf to the root, mixing each node's estimator
-        // prediction with the deeper prediction by its CTW weight. Each node read
-        // is stashed for the matching `update` to reuse.
         let mask_d = if DEPTH >= 64 { u64::MAX } else { (1u64 << DEPTH) - 1 };
-        let leaf = self.get(DEPTH, self.hist & mask_d);
-        self.spath[DEPTH] = leaf;
-        let mut pred = leaf.kt_p1();
-        // The on-path child at depth d+1 is exactly the node fetched as `nd` in the
-        // previous (deeper) iteration, so carry it forward instead of re-fetching:
-        // halves the path lookups. `onpath` starts as the depth-D leaf.
-        let mut onpath = leaf;
-        for d in (0..DEPTH).rev() {
-            let ctx_d = self.hist & ((1u64 << d) - 1).max(0); // last d bits (0 when d==0)
-            let nd = self.get(d, ctx_d);
-            // children at depth d+1 split on bit d of history
-            let sib_ctx = (self.hist & ((1u64 << (d + 1)) - 1)) ^ (1u64 << d);
-            let sib = self.get(d + 1, sib_ctx);
-            self.spath[d] = nd;
-            self.ssib[d] = sib.lw;
-            let lpc = onpath.lw + sib.lw; // ln Pw(s0)Pw(s1)
-            // alpha = Pe / (Pe + Pc) = 1 / (1 + e^{lpc - lpe}). When the exponent is
-            // exactly 0 (the common case of an empty node with empty children, e.g.
-            // the deep unseen tail) e^0 == 1, so alpha is exactly 0.5 — skip the
-            // expensive transcendental. Bit-identical to the full expression.
-            let arg = lpc - nd.lpe;
-            let alpha = if arg == 0.0 { 0.5 } else { 1.0 / (1.0 + arg.exp()) };
-            pred = alpha * nd.kt_p1() + (1.0 - alpha) * pred;
-            onpath = nd; // becomes the on-path child for the next, shallower depth
-        }
+        let pred = if !self.capped {
+            // Fast path: probe the path top-down only until the first absent depth.
+            // Pre-cap, present nodes are a prefix {0..=frontier}; everything deeper is
+            // empty and leaves pred at 0.5, so it needs no probe.
+            let mut frontier: isize = -1;
+            let mut absent = DEPTH + 1; // first depth with no node (exclusive top of prefix)
+            for d in 0..=DEPTH {
+                let k = Self::key(d, self.ctx_at(d, mask_d));
+                self.skey[d] = k;
+                match self.nodes.get(&k) {
+                    Some(node) => {
+                        self.spath[d] = *node;
+                        frontier = d as isize;
+                    }
+                    None => {
+                        absent = d;
+                        break;
+                    }
+                }
+            }
+            // Absent tail: empty nodes, absent siblings. Fill keys (for update's
+            // inserts) and the empty stash so update reproduces the full recursion.
+            for d in absent..=DEPTH {
+                self.skey[d] = Self::key(d, self.ctx_at(d, mask_d));
+                self.spath[d] = Node::empty();
+            }
+            for d in absent..DEPTH {
+                self.ssib[d] = 0.0;
+            }
+            // Seed the recursion. If the leaf is present we start from its KT estimate
+            // (and it is the on-path child of depth DEPTH-1); otherwise the empty tail
+            // pins pred at 0.5 down to the frontier, whose on-path child is empty.
+            let (mut pred, mut onpath_lw, top) = if frontier == DEPTH as isize {
+                let leaf = self.spath[DEPTH];
+                (leaf.kt_p1(), leaf.lw, DEPTH as isize - 1)
+            } else {
+                (0.5, 0.0, frontier)
+            };
+            let mut d = top;
+            while d >= 0 {
+                let di = d as usize;
+                let sib_ctx = (self.hist & ((1u64 << (di + 1)) - 1)) ^ (1u64 << di);
+                let sib_lw = self.get(di + 1, sib_ctx).lw; // sibling may be present
+                self.ssib[di] = sib_lw;
+                let nd = self.spath[di];
+                pred = Self::step(pred, &nd, onpath_lw, sib_lw);
+                onpath_lw = nd.lw;
+                d -= 1;
+            }
+            pred
+        } else {
+            // Post-cap fallback: full leaf→root walk (the prefix invariant can break
+            // once growth is frozen, so probe every depth).
+            let leaf = self.get(DEPTH, self.hist & mask_d);
+            self.spath[DEPTH] = leaf;
+            self.skey[DEPTH] = Self::key(DEPTH, self.hist & mask_d);
+            let mut pred = leaf.kt_p1();
+            let mut onpath = leaf;
+            for d in (0..DEPTH).rev() {
+                let ctx_d = self.hist & ((1u64 << d) - 1);
+                let k = Self::key(d, ctx_d);
+                let nd = self.get(d, ctx_d);
+                let sib_ctx = (self.hist & ((1u64 << (d + 1)) - 1)) ^ (1u64 << d);
+                let sib = self.get(d + 1, sib_ctx);
+                self.spath[d] = nd;
+                self.skey[d] = k;
+                self.ssib[d] = sib.lw;
+                pred = Self::step(pred, &nd, onpath.lw, sib.lw);
+                onpath = nd;
+            }
+            pred
+        };
         let mut p = (pred * 4096.0) as i32;
         if p < 1 { p = 1; }
         if p > 4095 { p = 4095; }
@@ -164,7 +238,6 @@ impl Ctw {
         // is the value we just updated, the sibling's is unchanged.
         let mut child_lw = 0.0f64; // lw of the (updated) deeper path node; leaf has no children below
         for d in (0..=DEPTH).rev() {
-            let ctx = if d == 0 { 0 } else { self.hist & ((1u64 << d) - 1) };
             // Reuse the node `predict` already read for this depth (same history,
             // no writes since) instead of re-fetching it from the map.
             let mut nd = self.spath[d];
@@ -195,11 +268,16 @@ impl Ctw {
                 nd.lw = if a == b { a + self.ln2 } else { ln_add(a, b) };
                 child_lw = nd.lw;
             }
-            let k = Self::key(d, ctx);
+            // Key was computed and stashed by `predict` for this same depth/history.
+            let k = self.skey[d];
             // Bounded memory: only grow the store until the cap; past it, refresh
-            // existing nodes but stop adding new contexts (they stay empty).
+            // existing nodes but stop adding new contexts (they stay empty). The first
+            // refused insert can leave a present node with an absent parent, breaking
+            // the prefix invariant, so disable predict's top-down skip from here on.
             if self.nodes.len() < MAXNODES || self.nodes.contains_key(&k) {
                 self.nodes.insert(k, nd);
+            } else {
+                self.capped = true;
             }
         }
         self.hist = (self.hist << 1) | (b as u64);
