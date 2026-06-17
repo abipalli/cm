@@ -1,0 +1,8 @@
+### LINES vs WORK across two cache footprints (same 8KB input, ~same op count) ###
+=== small-input context tables = 2^16 slots ===
+LINES: 10390194 distinct 64B lines (664972416 bytes touched; deterministic, counts heap+static+stack)
+WORK: 8249510050 (= 8249336482 fuel + 1 x 173568 heap-bytes; init-free, for 4096 bytes; lower is faster/leaner)
+=== small-input context tables = 2^22 slots ===
+LINES: 42968754 distinct 64B lines (2750000256 bytes touched; deterministic, counts heap+static+stack)
+WORK: 8255239687 (= 8255239687 fuel + 1 x 0 heap-bytes; init-free, for 4096 bytes; lower is faster/leaner)
+### restored model.rs ###
