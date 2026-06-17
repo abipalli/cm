@@ -137,6 +137,7 @@ def main() -> int:
                 "model": meta.get("model", ""),
                 "score": first_int(score),
                 "work": first_int(meta.get("work", "")),
+                "memcost": first_int(meta.get("memcost", "")),
                 "delta": delta,
                 "deltaValue": first_int(delta) if "baseline" not in delta else None,
                 "vsZstd": vs_zstd,

@@ -15,6 +15,7 @@ model=""
 note=""
 attempts=""
 work=""
+memcost=""
 ci_mode=0
 diff_base="HEAD"
 
@@ -25,6 +26,7 @@ while [[ $# -gt 0 ]]; do
     --note) note="${2:-}"; shift 2 ;;
     --attempts) attempts="${2:-}"; shift 2 ;;
     --work) work="${2:-}"; shift 2 ;;
+    --memcost) memcost="${2:-}"; shift 2 ;;
     --ci) ci_mode=1; shift ;;
     --diff-base) diff_base="${2:-}"; shift 2 ;;
     -h|--help)
@@ -202,6 +204,9 @@ mkdir -p history/entries
   echo "| vs zstd -22 | ${vs_zstd} |"
   if [[ -n "$work" ]]; then
     echo "| WORK | ${work} |"
+  fi
+  if [[ -n "$memcost" ]]; then
+    echo "| MEMCOST | ${memcost} |"
   fi
   echo "| Status | ${status} |"
   echo

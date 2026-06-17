@@ -236,6 +236,7 @@ function renderGrid(data) {
         <td class="c-delta"><span class="badge ${deltaClass}">${escapeHtml(compactDelta(e))}</span></td>
         <td class="c-zstd">${escapeHtml(e.vsZstd)}</td>
         <td class="c-work" title="${e.work != null ? e.work + " wasm operators (deterministic, lower is faster)" : "not measured"}">${fmtWork(e.work)}</td>
+        <td class="c-memcost" title="${e.memcost != null ? e.memcost + " — deterministic cache-miss penalty (memory traffic); lower is friendlier to memory" : "not measured"}">${fmtWork(e.memcost)}</td>
         <td class="c-open"><span class="open-btn">View ↗</span></td>
       </tr>`;
     })
@@ -255,6 +256,7 @@ function renderGrid(data) {
         <th class="c-delta">Δ</th>
         <th class="c-zstd">vs zstd</th>
         <th class="c-work" title="Deterministic complexity — wasm fuel (executed operators); lower is faster. Breaks exact SCORE ties: equal bytes, lower WORK wins.">WORK</th>
+        <th class="c-memcost" title="Deterministic memory-traffic cost — weighted cache-miss penalty from a fixed cache model over the wasm access trace; lower is friendlier to memory (tracks cache latency, which WORK cannot).">MEMCOST</th>
         <th class="c-open"></th>
       </tr>
     </thead>
@@ -339,6 +341,7 @@ function openDialog(e, repo) {
       <div class="d-metric"><span class="m-label">Δ vs record</span><span class="m-value"><span class="badge ${deltaClass}">${escapeHtml(e.delta)}</span></span></div>
       <div class="d-metric"><span class="m-label">vs zstd −22</span><span class="m-value">${escapeHtml(e.vsZstd)}</span></div>
       ${e.work != null ? `<div class="d-metric"><span class="m-label">WORK</span><span class="m-value" title="deterministic wasm fuel — executed operators; lower is faster">${fmt(e.work)}</span></div>` : ""}
+      ${e.memcost != null ? `<div class="d-metric"><span class="m-label">MEMCOST</span><span class="m-value" title="deterministic cache-miss penalty (memory traffic); lower is friendlier to memory">${fmt(e.memcost)}</span></div>` : ""}
       <div class="d-metric"><span class="m-label">commit</span><span class="m-value"><a class="sha" href="${commitUrl}" target="_blank" rel="noopener">${escapeHtml(e.commit)}</a></span></div>
     </div>
 

@@ -1,0 +1,19 @@
+[package]
+name = "cm-mem-meter"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Deterministic, tamper-proof memory-traffic meter. Instruments the wasm shim's
+# loads/stores and runs the access trace through a fixed cache model. Lives
+# OUTSIDE src/algorithm/, so a submission cannot alter the measurement. Pinned
+# deps keep the instrumented module and the simulation reproducible.
+[dependencies]
+walrus = "=0.23.3"
+wasmtime = { version = "26", default-features = false, features = ["cranelift", "runtime"] }
+anyhow = "1"
+
+[profile.release]
+opt-level = 3
+
+[workspace]

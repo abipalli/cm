@@ -12,3 +12,26 @@ pub extern "C" fn compress_prefix(n: u32) -> u32 {
     let n = (n as usize).min(CORPUS.len());
     cm::compress(&CORPUS[..n]).len() as u32
 }
+
+/// Compress `n` bytes of deterministic HIGH-ENTROPY data (a fixed splitmix64
+/// stream). Used by the memory-traffic meter: unlike the repetitive text corpus,
+/// high-entropy input forces the codec to touch many distinct context-table slots
+/// and grow the CTW node store, so the *active* working set is large and the
+/// cache model sees realistic miss traffic. The stream is fixed (seeded), so the
+/// measurement stays deterministic and machine-independent.
+#[no_mangle]
+pub extern "C" fn compress_prefix_he(n: u32) -> u32 {
+    let n = n as usize;
+    let mut buf = vec![0u8; n];
+    let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
+    for b in buf.iter_mut() {
+        // splitmix64
+        x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = x;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^= z >> 31;
+        *b = (z >> 24) as u8;
+    }
+    cm::compress(&buf).len() as u32
+}

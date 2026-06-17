@@ -60,6 +60,18 @@ else
   echo "scorekeeper: complexity metric unavailable; recording without WORK"
 fi
 
+# Memory-traffic metric (best-effort; never blocks recording). Instruments the
+# wasm loads/stores and runs the deterministic access trace through a fixed cache
+# model — captures the cache/latency cost that WORK (operator count) cannot see.
+memcost=""
+echo "== memory-traffic metric (wasm cache model) =="
+if mem_out="$(bash scripts/measure-memcost.sh 2>&1)"; then
+  echo "$mem_out"
+  memcost="$(printf '%s\n' "$mem_out" | sed -n 's/^MEMCOST: \([0-9][0-9]*\).*/\1/p' | tail -1)"
+else
+  echo "scorekeeper: memory-traffic metric unavailable; recording without MEMCOST"
+fi
+
 # PR metadata. The token here is the read-only default GITHUB_TOKEN.
 author="@${GITHUB_ACTOR:-unknown}"
 model=""
@@ -88,6 +100,7 @@ fi
 record_args=(--ci --author "$author" --model "$model" --note "$note" --diff-base HEAD~1)
 [[ -n "$attempts" ]] && record_args+=(--attempts "$attempts")
 [[ -n "$work" ]] && record_args+=(--work "$work")
+[[ -n "$memcost" ]] && record_args+=(--memcost "$memcost")
 
 echo "== record submission (generate ledger files) =="
 rec_out="$(bash scripts/record.sh "${record_args[@]}")"
