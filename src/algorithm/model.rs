@@ -203,11 +203,12 @@ impl Mixer {
         let ctx = ctx & (self.nctx - 1);
         self.ctx = ctx;
         let base = ctx * self.n;
-        // Slice both operands to exactly `n` up front so the inner loop is
-        // bounds-check-free (one range check here instead of one per element);
+        // Slice both operands to exactly `n` so the inner loop is bounds-check-free.
+        // base+n = (ctx+1)*n <= nctx*n = w.len() (ctx < nctx after the mask) and
+        // inputs.len() == n at every call site, so both slices are always valid;
         // the i64 accumulation order is unchanged, so the result is identical.
-        let w = &self.w[base..base + self.n];
-        let inp = &inputs[..self.n];
+        let w = unsafe { self.w.get_unchecked(base..base + self.n) };
+        let inp = unsafe { inputs.get_unchecked(..self.n) };
         let mut dot: i64 = 0;
         for (&wi, &xi) in w.iter().zip(inp) {
             dot += wi as i64 * xi as i64;
@@ -235,9 +236,9 @@ impl Mixer {
     fn update(&mut self, bit: i32, inputs: &[i32]) {
         let err = (bit << 12) - self.pr;
         let base = self.ctx * self.n;
-        // Bounds-check-free element-wise update (see `mix`): identical result.
-        let w = &mut self.w[base..base + self.n];
-        let inp = &inputs[..self.n];
+        // Bounds-check-free element-wise update (see `mix`): same valid slices.
+        let w = unsafe { self.w.get_unchecked_mut(base..base + self.n) };
+        let inp = unsafe { inputs.get_unchecked(..self.n) };
         for (wi, &xi) in w.iter_mut().zip(inp) {
             let delta = (xi * err * self.lr) >> 16;
             *wi = wi.wrapping_add(delta);
