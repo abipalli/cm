@@ -110,11 +110,15 @@ for f in history/entries/*.md; do
 done
 entry_id="$(printf '%04d' "$next")"
 
-# Previous record = lowest SCORE in RESULTS.md (numeric rows only). On an exact
-# SCORE tie, the lower WORK (deterministic complexity) wins — see the decision
-# block below — so we also remember the incumbent record's entry id to look up
-# its WORK from history/entries/.
+# Previous record = the row minimising (SCORE asc, then WORK asc): byte score is
+# dominant, and on an exact SCORE tie the lowest WORK (deterministic complexity)
+# holds the record. So the incumbent is the lowest-WORK row *among* the min-SCORE
+# rows — not merely the first one — which matters once several entries share the
+# record SCORE. A missing WORK counts as +infinity. We remember the incumbent's
+# entry id to look up its WORK in the decision block below.
+INF=9000000000000000000 # > any real WORK; stands in for "no WORK measured"
 prev_score=""
+prev_wv=""
 prev_id=""
 while IFS= read -r line; do
   # Data rows look like: | 0001 | date | @author | 642822 | ...
@@ -124,9 +128,17 @@ while IFS= read -r line; do
   esac
   s="$(echo "$line" | awk -F'|' '{gsub(/ /,"",$5); print $5}')"
   [[ "$s" =~ ^[0-9]+$ ]] || continue
-  if [[ -z "$prev_score" || "$s" -lt "$prev_score" ]]; then
+  id="$(echo "$line" | awk -F'|' '{gsub(/ /,"",$2); print $2}')"
+  # This row's WORK from its history entry (empty -> +infinity for ranking).
+  rw=""
+  rf="$(ls history/entries/${id}*.md 2>/dev/null | head -1 || true)"
+  [[ -n "$rf" ]] && rw="$(sed -n 's/^| WORK | \([0-9][0-9]*\) |.*/\1/p' "$rf" | tail -1)"
+  wv="${rw:-$INF}"
+  if [[ -z "$prev_score" ]] || (( s < prev_score )) \
+     || { (( s == prev_score )) && (( wv < prev_wv )); }; then
     prev_score="$s"
-    prev_id="$(echo "$line" | awk -F'|' '{gsub(/ /,"",$2); print $2}')"
+    prev_wv="$wv"
+    prev_id="$id"
   fi
 done < RESULTS.md
 
