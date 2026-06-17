@@ -6,6 +6,7 @@
 //! lossless on all inputs and the predict/update sequence stays identical
 //! between encode and decode.
 
+use super::ctw::Ctw;
 use super::dmc::Dmc;
 use super::tables::{build, build16, squash16_d, squash_d};
 
@@ -18,7 +19,8 @@ const SM_BASE: usize = NCTX;
 const MM_BASE: usize = 2 * NCTX;
 const DMC_IN: usize = 2 * NCTX + 6; // DMC variable-order prediction (one extra input)
 const DMC2_IN: usize = 2 * NCTX + 7; // second, slow-cloning DMC prediction
-const NINPUT: usize = 2 * NCTX + 8;
+const CTW_IN: usize = 2 * NCTX + 8; // Context Tree Weighting prediction
+const NINPUT: usize = 2 * NCTX + 9;
 const TBITS: u32 = 20; // default per-model context-table size (2^TBITS slots)
 const MIXCTX: usize = 16384;
 const NL1: usize = 27; // number of layer-1 specialist mixers
@@ -327,6 +329,7 @@ pub struct Cm {
     apm4: Apm,
     dmc: Dmc,
     dmc2: Dmc,
+    ctw: Ctw,
     c0: i32,
     bitcount: i32,
     c4: u32,
@@ -414,7 +417,7 @@ impl Cm {
         tb[0] = 9;
         for i in 0..NCTX {
             if assoc[i] {
-                tb[i] = 20 + grow; // aggressive shrink for speed+memory
+                tb[i] = 23 + grow; // size for SCORE, not speed (the objective ignores WORK)
             }
         }
         let mut tmask = [0u32; NCTX];
@@ -576,6 +579,7 @@ impl Cm {
             apm4,
             dmc: Dmc::new(2, 2),
             dmc2: Dmc::new(8, 8),
+            ctw: Ctw::new(),
             c0: 1,
             bitcount: 0,
             c4: 0,
@@ -1561,6 +1565,7 @@ impl Cm {
         // DMC variable-order Markov prediction — one extra mixer input.
         self.mix_in[DMC_IN] = self.dmc.predict(&self.stretch);
         self.mix_in[DMC2_IN] = self.dmc2.predict(&self.stretch);
+        self.mix_in[CTW_IN] = self.ctw.predict(&self.stretch);
         // Layer-1 specialist mixers, each selected by a different context:
         //   m0 — the proven last-byte + match-activity context (full resolution)
         //   m1 — the within-byte partial-byte context (order-0 bit position)
@@ -1898,6 +1903,7 @@ impl Cm {
         self.apm4.update(bit);
         self.dmc.update(bit);
         self.dmc2.update(bit);
+        self.ctw.update(bit);
         if self.mm_used {
             let v = self.mm_sm[self.mm_idx] as i32;
             self.mm_sm[self.mm_idx] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 6)) as u16;
