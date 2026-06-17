@@ -12,6 +12,13 @@ path = "src/lib.rs"
 name = "cm"
 path = "src/main.rs"
 
+[features]
+# Deterministic complexity metric: compiles in a hot-path work-unit counter
+# (mixer dot terms + context-model accesses). Off by default, so the scored
+# build has zero overhead and byte-identical output. Build the measurement
+# binary with `cargo build --release --features metrics` and run `cm metrics`.
+metrics = []
+
 [profile.release]
 opt-level = 3
 lto = true

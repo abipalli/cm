@@ -28,11 +28,18 @@ fn main() {
             let dir = args.get(2).map(|s| s.as_str()).unwrap_or("corpus");
             exit(eval::run(dir));
         }
+        "metrics" => {
+            let dir = args.get(2).map(|s| s.as_str()).unwrap_or("tiny");
+            exit(cm::harness::metrics::run(dir));
+        }
         _ => usage(),
     }
 }
 
 fn usage() -> ! {
-    eprintln!("usage:\n  cm c <in> <out>\n  cm d <in> <out>\n  cm eval [corpus_dir]");
+    eprintln!(
+        "usage:\n  cm c <in> <out>\n  cm d <in> <out>\n  cm eval [corpus_dir]\n  \
+         cm metrics [dir]   (build --features metrics for op counts)"
+    );
     exit(2);
 }
