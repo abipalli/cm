@@ -7,8 +7,13 @@ name = "cm"
 version = "0.1.0"
 
 [[package]]
+name = "cm-telemetry"
+version = "0.0.0"
+
+[[package]]
 name = "cm-wasm-meter"
 version = "0.0.0"
 dependencies = [
  "cm",
+ "cm-telemetry",
 ]

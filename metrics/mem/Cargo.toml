@@ -1,11 +1,12 @@
 [package]
-name = "cm-wasm-meter"
+name = "cm-mem-meter"
 version = "0.0.0"
 edition = "2021"
 publish = false
 
-[lib]
-crate-type = ["cdylib"]
+[[bin]]
+name = "cm-mem-meter"
+path = "src/main.rs"
 
 [dependencies]
 cm = { path = "../.." }
@@ -13,6 +14,5 @@ cm-telemetry = { path = "../telemetry" }
 
 [profile.release]
 opt-level = 3
-panic = "abort"
 
 [workspace]
