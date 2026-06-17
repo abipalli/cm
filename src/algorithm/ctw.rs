@@ -80,6 +80,12 @@ fn ln_add(a: f64, b: f64) -> f64 {
 pub struct Ctw {
     nodes: NodeMap,
     hist: u64, // bit history, most-recent bit in bit 0
+    // Nodes read by `predict`, stashed so the immediately-following `update` (same
+    // bit, same history, no intervening writes) reuses them instead of re-fetching
+    // every path/sibling node from the map. predict and update are always paired
+    // (predict first), so these are fresh when update runs.
+    spath: [Node; DEPTH + 1], // path node at each depth 0..=DEPTH
+    ssib: [f64; DEPTH],       // sibling lw used at depth d (d in 0..DEPTH)
 }
 
 impl Ctw {
@@ -87,6 +93,8 @@ impl Ctw {
         Ctw {
             nodes: NodeMap::with_capacity_and_hasher(1 << 20, BuildHasherDefault::default()),
             hist: 0,
+            spath: [Node::empty(); DEPTH + 1],
+            ssib: [0.0; DEPTH],
         }
     }
 
@@ -105,11 +113,13 @@ impl Ctw {
 
     /// CTW predictive P(bit = 1) at the current context, as a stretched logit.
     #[inline]
-    pub fn predict(&self, stretch: &[i32]) -> i32 {
+    pub fn predict(&mut self, stretch: &[i32]) -> i32 {
         // Walk up from the depth-D leaf to the root, mixing each node's estimator
-        // prediction with the deeper prediction by its CTW weight.
+        // prediction with the deeper prediction by its CTW weight. Each node read
+        // is stashed for the matching `update` to reuse.
         let mask_d = if DEPTH >= 64 { u64::MAX } else { (1u64 << DEPTH) - 1 };
         let leaf = self.get(DEPTH, self.hist & mask_d);
+        self.spath[DEPTH] = leaf;
         let mut pred = leaf.kt_p1();
         // The on-path child at depth d+1 is exactly the node fetched as `nd` in the
         // previous (deeper) iteration, so carry it forward instead of re-fetching:
@@ -121,6 +131,8 @@ impl Ctw {
             // children at depth d+1 split on bit d of history
             let sib_ctx = (self.hist & ((1u64 << (d + 1)) - 1)) ^ (1u64 << d);
             let sib = self.get(d + 1, sib_ctx);
+            self.spath[d] = nd;
+            self.ssib[d] = sib.lw;
             let lpc = onpath.lw + sib.lw; // ln Pw(s0)Pw(s1)
             // alpha = Pe / (Pe + Pc) = 1 / (1 + e^{lpc - lpe})
             let alpha = 1.0 / (1.0 + (lpc - nd.lpe).exp());
@@ -143,7 +155,9 @@ impl Ctw {
         let mut child_lw = 0.0f64; // lw of the (updated) deeper path node; leaf has no children below
         for d in (0..=DEPTH).rev() {
             let ctx = if d == 0 { 0 } else { self.hist & ((1u64 << d) - 1) };
-            let mut nd = self.get(d, ctx);
+            // Reuse the node `predict` already read for this depth (same history,
+            // no writes since) instead of re-fetching it from the map.
+            let mut nd = self.spath[d];
             // KT probability of the observed bit, then count it.
             let denom = nd.n[0] as f64 + nd.n[1] as f64 + 1.0;
             let p_obs = (nd.n[b] as f64 + 0.5) / denom;
@@ -153,9 +167,9 @@ impl Ctw {
                 nd.lw = nd.lpe; // leaf
                 child_lw = nd.lw;
             } else {
-                // sibling (off-path child) lw, unchanged this step
-                let sib_ctx = (self.hist & ((1u64 << (d + 1)) - 1)) ^ (1u64 << d);
-                let sib_lw = self.get(d + 1, sib_ctx).lw;
+                // sibling (off-path child) lw, unchanged this step — also stashed
+                // by predict.
+                let sib_lw = self.ssib[d];
                 nd.lw = ln_add(LN_HALF + nd.lpe, LN_HALF + child_lw + sib_lw);
                 child_lw = nd.lw;
             }
