@@ -76,7 +76,8 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0069 | 2026-06-17 | @10d9e | 572577 | 0 bytes, -102694912 WORK (new record) | +17.22% | `71cbf52` | [0069](history/entries/0069--10d9e.md) | Output-neutral WORK reduction in the mixer, which profiling shows is ~74% of tot… |
 | 0070 | 2026-06-17 | @10d9e | 572577 | 0 bytes, -753824008 WORK (new record) | +17.22% | `9db11bc` | [0070](history/entries/0070--10d9e.md) | Output-neutral WORK reduction in the mixer, which profiling shows is ~74% of tot… |
 | 0071 | 2026-06-17 | @10d9e | 572577 | 0 bytes, -1485602816 WORK (new record) | +17.22% | `505ce52` | [0071](history/entries/0071--10d9e.md) | Output-neutral WORK reduction completing the mixer fusion. The previous PR fused… |
+| 0072 | 2026-06-17 | @10d9e | 572577 | 0 bytes, -117458099 WORK (new record) | +17.22% | `6ccfc51` | [0072](history/entries/0072--10d9e.md) | Completes the mixer fusion by applying it to the 10 layer-2 combiners; the previ… |
 
-**Current record: 572577** (@10d9e, entry 0071)
+**Current record: 572577** (@10d9e, entry 0072)
 
 Ledger updates are **CI-only** — see [`.github/workflows/scorekeeper.yml`](.github/workflows/scorekeeper.yml).
