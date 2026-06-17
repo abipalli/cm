@@ -1977,33 +1977,34 @@ impl Cm {
             let v = self.mm_sm6[self.mm_idx6] as i32;
             self.mm_sm6[self.mm_idx6] = (v + (((if bit != 0 { 4095 } else { 0 }) - v) >> 5)) as u16;
         }
-        self.l1[0].update(bit, &self.mix_in);
-        self.l1[1].update(bit, &self.mix_in);
-        self.l1[2].update(bit, &self.mix_in);
-        self.l1[3].update(bit, &self.mix_in);
-        self.l1[4].update(bit, &self.mix_in);
-        self.l1[5].update(bit, &self.mix_in);
-        self.l1[6].update(bit, &self.mix_in);
-        self.l1[7].update(bit, &self.mix_in);
-        self.l1[8].update(bit, &self.mix_in);
-        self.l1[9].update(bit, &self.mix_in);
-        self.l1[10].update(bit, &self.mix_in);
-        self.l1[11].update(bit, &self.mix_in);
-        self.l1[12].update(bit, &self.mix_in);
-        self.l1[13].update(bit, &self.mix_in);
-        self.l1[14].update(bit, &self.mix_in);
-        self.l1[15].update(bit, &self.mix_in);
-        self.l1[16].update(bit, &self.mix_in);
-        self.l1[17].update(bit, &self.mix_in);
-        self.l1[18].update(bit, &self.mix_in);
-        self.l1[19].update(bit, &self.mix_in);
-        self.l1[20].update(bit, &self.mix_in);
-        self.l1[21].update(bit, &self.mix_in);
-        self.l1[22].update(bit, &self.mix_in);
-        self.l1[23].update(bit, &self.mix_in);
-        self.l1[24].update(bit, &self.mix_in);
-        self.l1[25].update(bit, &self.mix_in);
-        self.l1[26].update(bit, &self.mix_in);
+        // Fused layer-1 weight update (mirror of the fused dot in `predict`): all
+        // 27 specialists train on the same input vector, so load each mix_in[i]
+        // once and apply it to all 27 weight rows in one pass. Each row's update
+        // is identical to the per-mixer loop: w[i] += (x[i] * err_k * lr_k) >> 16,
+        // with err_k*lr_k folded once (both fit i32, so the value is unchanged).
+        {
+            let n = NINPUT;
+            let mut errlr = [0i32; NL1];
+            let mut rowp: [*mut i32; NL1] = [core::ptr::null_mut::<i32>(); NL1];
+            for k in 0..NL1 {
+                let m = &mut self.l1[k];
+                errlr[k] = ((bit << 12) - m.pr) * m.lr;
+                let base = m.ctx * n;
+                // SAFETY: base + n <= w.len() (ctx < nctx), and the 27 rows live in
+                // distinct, non-overlapping weight buffers that are never resized
+                // here, so the pointers stay valid and non-aliasing for the loop.
+                rowp[k] = unsafe { m.w.as_mut_ptr().add(base) };
+            }
+            for i in 0..n {
+                let xi = self.mix_in[i];
+                for k in 0..NL1 {
+                    unsafe {
+                        let p = rowp[k].add(i);
+                        *p = (*p).wrapping_add((xi * errlr[k]) >> 16);
+                    }
+                }
+            }
+        }
         self.l2.update(bit, &self.l2_in);
         self.l2b.update(bit, &self.l2_in);
         self.l2c.update(bit, &self.l2_in);
