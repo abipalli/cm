@@ -67,6 +67,7 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0060 | 2026-06-17 | @10d9e | 573215 | +572 | +17.13% | `c495164` | [0060](history/entries/0060--10d9e.md) | Build fix. The merge of the table-shrink speed branch with the second-DMC model … |
 | 0061 | 2026-06-17 | @10d9e | 573215 | +572 | +17.13% | `f163274` | [0061](history/entries/0061--10d9e.md) | Output-neutral complexity (WORK) reduction: byte-identical output on every corpu… |
 | 0062 | 2026-06-17 | @10d9e | 573215 | +572 | +17.13% | `a377305` | [0062](history/entries/0062--10d9e.md) | Output-neutral WORK reduction in the hot per-model predict/update loops (the 106… |
+| 0063 | 2026-06-17 | @10d9e | 573215 | +572 | +17.13% | `486bd63` | [0063](history/entries/0063--10d9e.md) | Output-neutral WORK reduction: removes bounds checks on the logistic/SSE lookup … |
 
 **Current record: 572643** (@abipalli, entry 0059)
 
