@@ -11,6 +11,7 @@
 | Δ vs previous record | -154 (new record) |
 | vs zstd -22 | +17.24% |
 | WORK | 8037454358 |
+| MEMCOST | 3114620224 |
 | Status | record |
 
 ## Approach

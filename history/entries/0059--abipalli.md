@@ -10,6 +10,8 @@
 | SCORE | 572643 |
 | Δ vs previous record | -126 (new record) |
 | vs zstd -22 | +17.21% |
+| WORK | 16237821821 |
+| MEMCOST | 1791892226 |
 | Status | record |
 
 ## Approach
