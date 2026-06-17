@@ -46,7 +46,7 @@ impl Hasher for IdHasher {
 }
 type NodeMap = HashMap<u64, Node, BuildHasherDefault<IdHasher>>;
 
-const DEPTH: usize = 32; // context depth in bits (4 bytes)
+const DEPTH: usize = 48; // context depth in bits (6 bytes)
 const MAXNODES: usize = 1 << 24; // node-store cap (~0.8 GB); freeze growth when hit
                                  // so adversarial/random inputs cannot OOM the verifier
 const LN_HALF: f64 = -0.693_147_180_559_945_3; // ln(1/2)
