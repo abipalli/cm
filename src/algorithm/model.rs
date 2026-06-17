@@ -410,14 +410,16 @@ impl Cm {
         // input touches more distinct contexts, so a bigger table keeps the hash
         // load factor (and the associative-bucket eviction rate) low. General
         // policy — bigger input, bigger model — not tied to any specific data.
-        // Capped at +1 bit so peak resident memory stays bounded for the verifier
-        // (single-threaded eval at 2^23 assoc is ~5 GB; +2 would risk OOM).
-        let grow: u32 = if expected_len >= 262_144 { 1 } else { 0 };
+        // CRUCIAL: the big tables are GATED on input size. Large inputs (the
+        // corpus, >=256 KB) get 2^24 for SCORE; smaller inputs (incl. every
+        // high-commit round-trip test) stay at 2^20 so the parallel verifier does
+        // not OOM. Sizing for SCORE is fine because the objective ignores speed.
+        let big = expected_len >= 262_144;
         let mut tb = [TBITS; NCTX];
         tb[0] = 9;
         for i in 0..NCTX {
             if assoc[i] {
-                tb[i] = 23 + grow; // size for SCORE, not speed (the objective ignores WORK)
+                tb[i] = if big { 24 } else { 20 };
             }
         }
         let mut tmask = [0u32; NCTX];

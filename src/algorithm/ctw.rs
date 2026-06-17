@@ -20,6 +20,8 @@
 use std::collections::HashMap;
 
 const DEPTH: usize = 24; // context depth in bits (3 bytes)
+const MAXNODES: usize = 1 << 24; // node-store cap (~0.8 GB); freeze growth when hit
+                                 // so adversarial/random inputs cannot OOM the verifier
 const LN_HALF: f64 = -0.693_147_180_559_945_3; // ln(1/2)
 
 #[derive(Clone, Copy)]
@@ -123,7 +125,12 @@ impl Ctw {
                 nd.lw = ln_add(LN_HALF + nd.lpe, LN_HALF + child_lw + sib_lw);
                 child_lw = nd.lw;
             }
-            self.nodes.insert(Self::key(d, ctx), nd);
+            let k = Self::key(d, ctx);
+            // Bounded memory: only grow the store until the cap; past it, refresh
+            // existing nodes but stop adding new contexts (they stay empty).
+            if self.nodes.len() < MAXNODES || self.nodes.contains_key(&k) {
+                self.nodes.insert(k, nd);
+            }
         }
         self.hist = (self.hist << 1) | (b as u64);
     }
