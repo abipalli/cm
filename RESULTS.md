@@ -64,6 +64,7 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0057 | 2026-06-16 | @10d9e | 572769 | -607 (new record) | +17.19% | `9b3433b` | [0057](history/entries/0057--10d9e.md) | Continues extending the indirect-on-transform family (each model hashes a byte-t… |
 | 0058 | 2026-06-16 | @10d9e | 572769 | 0 (tie) | +17.19% | `e847a4b` | [0058](history/entries/0058--10d9e.md) | Pure efficiency change: SCORE is byte-for-byte identical (572769); the codec is … |
 | 0059 | 2026-06-17 | @abipalli | 572643 | -126 (new record) | +17.21% | `1134861` | [0059](history/entries/0059--abipalli.md) | Adds a **second DMC instance at a conservative clone threshold**, complementing … |
+| 0060 | 2026-06-17 | @10d9e | 573215 | +572 | +17.13% | `c495164` | [0060](history/entries/0060--10d9e.md) | Build fix. The merge of the table-shrink speed branch with the second-DMC model … |
 
 **Current record: 572643** (@abipalli, entry 0059)
 
