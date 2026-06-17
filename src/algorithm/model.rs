@@ -197,7 +197,6 @@ impl Mixer {
         let ctx = ctx & (self.nctx - 1);
         self.ctx = ctx;
         let base = ctx * self.n;
-        super::op(self.n as u64); // metric: dot-product terms
         let mut dot: i64 = 0;
         for i in 0..self.n {
             dot += self.w[base + i] as i64 * inputs[i] as i64;
@@ -225,7 +224,6 @@ impl Mixer {
     fn update(&mut self, bit: i32, inputs: &[i32]) {
         let err = (bit << 12) - self.pr;
         let base = self.ctx * self.n;
-        super::op(self.n as u64); // metric: weight-update terms
         for i in 0..self.n {
             let delta = (inputs[i] * err * self.lr) >> 16;
             self.w[base + i] = self.w[base + i].wrapping_add(delta);
@@ -1379,7 +1377,6 @@ impl Cm {
 
     #[inline]
     pub fn predict(&mut self) -> i32 {
-        super::op(NCTX as u64); // metric: context-model accesses (predict)
         for i in 0..NCTX {
             let h = self.ctxhash[i]
                 .wrapping_mul(769)
@@ -1936,7 +1933,6 @@ impl Cm {
         self.l2h.update(bit, &self.l2_in);
         self.l2i.update(bit, &self.l2_in);
         self.l2j.update(bit, &self.l2_in);
-        super::op(NCTX as u64); // metric: context-model accesses (update)
         for i in 0..NCTX {
             let ix = self.idx[i];
             let n = self.tab[i][ix].cn as i32;

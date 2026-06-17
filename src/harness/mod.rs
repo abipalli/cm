@@ -2,4 +2,3 @@
 
 pub mod corpus;
 pub mod eval;
-pub mod metrics;

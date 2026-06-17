@@ -16,34 +16,6 @@ mod tables;
 use coder::{Decoder, Encoder};
 use model::Cm;
 
-/// Deterministic complexity metric (feature `metrics`). A global counter of
-/// hot-path work units — mixer dot/update terms and context-model accesses —
-/// accumulated during `compress`. Bit-exact reproducible for a fixed input and
-/// algorithm, on any machine. Compiled out entirely without the feature.
-#[cfg(feature = "metrics")]
-pub mod metrics {
-    use core::sync::atomic::{AtomicU64, Ordering};
-    pub static OPS: AtomicU64 = AtomicU64::new(0);
-    /// Reset the counter (call before a measured `compress`).
-    pub fn reset() {
-        OPS.store(0, Ordering::Relaxed);
-    }
-    /// Read the accumulated work-unit count.
-    pub fn get() -> u64 {
-        OPS.load(Ordering::Relaxed)
-    }
-}
-
-/// Add `n` work units to the metric counter (no-op without the `metrics` feature).
-#[cfg(feature = "metrics")]
-#[inline(always)]
-pub(crate) fn op(n: u64) {
-    metrics::OPS.fetch_add(n, core::sync::atomic::Ordering::Relaxed);
-}
-#[cfg(not(feature = "metrics"))]
-#[inline(always)]
-pub(crate) fn op(_n: u64) {}
-
 /// Compress `input` into a self-describing byte stream.
 pub fn compress(input: &[u8]) -> Vec<u8> {
     let n = input.len();
