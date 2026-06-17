@@ -102,7 +102,11 @@ pub struct Ctw {
 impl Ctw {
     pub fn new() -> Self {
         Ctw {
-            nodes: NodeMap::with_capacity_and_hasher(1 << 20, BuildHasherDefault::default()),
+            // Pre-size to ~4M slots so the store does not rehash (copy every live
+            // node to a new table) as it grows on realistic inputs; the cap is 2^24,
+            // so this only front-loads allocation that happens anyway. Capacity never
+            // affects HashMap lookups, so the output is byte-for-byte identical.
+            nodes: NodeMap::with_capacity_and_hasher(1 << 22, BuildHasherDefault::default()),
             hist: 0,
             spath: [Node::empty(); DEPTH + 1],
             ssib: [0.0; DEPTH],
