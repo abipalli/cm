@@ -71,7 +71,8 @@ Leaderboard of recorded submissions. Full narratives live in
 | 0064 | 2026-06-17 | @10d9e | 573215 | +572 | +17.13% | `0eb4c30` | [0064](history/entries/0064--10d9e.md) | Output-neutral WORK reduction in the mixer, the hottest code (27 layer-1 + 10 la… |
 | 0065 | 2026-06-17 | @abipalli | 572577 | -66 (new record) | +17.22% | `24a3698` | [0065](history/entries/0065--abipalli.md) | Two changes that together set a new record (**572643 → 572520, −123**): **1.… |
 | 0066 | 2026-06-17 | @10d9e | 572577 | 0 bytes, -2276895323 WORK (new record) | +17.22% | `9d061ef` | [0066](history/entries/0066--10d9e.md) | Output-neutral WORK reduction targeting the newly-added Context Tree Weighting m… |
+| 0067 | 2026-06-17 | @10d9e | 572577 | 0 bytes, -2349086360 WORK (new record) | +17.22% | `28c42a6` | [0067](history/entries/0067--10d9e.md) | Output-neutral WORK reduction in the CTW predict walk. The loop visits depths d … |
 
-**Current record: 572577** (@10d9e, entry 0066)
+**Current record: 572577** (@10d9e, entry 0067)
 
 Ledger updates are **CI-only** — see [`.github/workflows/scorekeeper.yml`](.github/workflows/scorekeeper.yml).
