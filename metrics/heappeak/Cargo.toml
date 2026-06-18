@@ -1,20 +1,13 @@
 [package]
-name = "cm-wasm-meter"
+name = "cm-heappeak-meter"
 version = "0.0.0"
 edition = "2021"
 publish = false
 
-[lib]
-crate-type = ["cdylib"]
-
 [dependencies]
 cm = { path = "../.." }
 
-[features]
-heap = []
-
 [profile.release]
 opt-level = 3
-panic = "abort"
 
 [workspace]

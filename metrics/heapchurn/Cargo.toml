@@ -1,20 +1,13 @@
 [package]
-name = "cm-wasm-meter"
+name = "cm-heapchurn-meter"
 version = "0.0.0"
 edition = "2021"
 publish = false
 
-[lib]
-crate-type = ["cdylib"]
-
 [dependencies]
-cm = { path = "../.." }
-
-[features]
-heap = []
+wasmtime = { version = "26", default-features = false, features = ["cranelift", "runtime"] }
 
 [profile.release]
 opt-level = 3
-panic = "abort"
 
 [workspace]

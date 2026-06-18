@@ -1,0 +1,18 @@
+[package]
+name = "cm-lines-meter"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "cm-lines-meter"
+path = "src/main.rs"
+
+[dependencies]
+walrus = "0.23"
+wasmtime = { version = "26", default-features = false, features = ["cranelift", "runtime"] }
+
+[profile.release]
+opt-level = 3
+
+[workspace]
