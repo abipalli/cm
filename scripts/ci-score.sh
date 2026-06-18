@@ -72,6 +72,39 @@ else
   echo "scorekeeper: memory-traffic metric unavailable; recording without MEMCOST"
 fi
 
+# Distinct-cache-lines metric (best-effort; never blocks recording). Companion to
+# MEMCOST: counts distinct 64B lines touched on the same init-free differencing.
+lines=""
+echo "== distinct-cache-lines metric (LINES) =="
+if out=$(bash scripts/measure-lines.sh 2>&1); then
+  echo "$out"
+  lines="$(printf '%s\n' "$out" | sed -n 's/^LINES: \([0-9]*\).*/\1/p' | tail -1)"
+else
+  echo "scorekeeper: LINES unavailable; recording without LINES"
+fi
+
+# Peak reserved-heap metric (best-effort; never blocks recording). Full-corpus
+# peak live reserved heap under a tracking allocator.
+heap_peak=""
+echo "== peak reserved-heap metric (HEAP_PEAK) =="
+if out=$(bash scripts/measure-heappeak.sh 2>&1); then
+  echo "$out"
+  heap_peak="$(printf '%s\n' "$out" | sed -n 's/^HEAP_PEAK: \([0-9]*\).*/\1/p' | tail -1)"
+else
+  echo "scorekeeper: HEAP_PEAK unavailable; recording without HEAP_PEAK"
+fi
+
+# Init-free heap-churn metric (best-effort; never blocks recording). Differences
+# requested heap bytes between FULL and HALF prefixes via the heap-feature shim.
+heap_churn=""
+echo "== init-free heap-churn metric (HEAP_CHURN) =="
+if out=$(bash scripts/measure-heapchurn.sh 2>&1); then
+  echo "$out"
+  heap_churn="$(printf '%s\n' "$out" | sed -n 's/^HEAP_CHURN: \([0-9]*\).*/\1/p' | tail -1)"
+else
+  echo "scorekeeper: HEAP_CHURN unavailable; recording without HEAP_CHURN"
+fi
+
 # PR metadata. The token here is the read-only default GITHUB_TOKEN.
 author="@${GITHUB_ACTOR:-unknown}"
 model=""
@@ -101,6 +134,9 @@ record_args=(--ci --author "$author" --model "$model" --note "$note" --diff-base
 [[ -n "$attempts" ]] && record_args+=(--attempts "$attempts")
 [[ -n "$work" ]] && record_args+=(--work "$work")
 [[ -n "$memcost" ]] && record_args+=(--memcost "$memcost")
+[[ -n "$lines" ]] && record_args+=(--lines "$lines")
+[[ -n "$heap_peak" ]] && record_args+=(--heap-peak "$heap_peak")
+[[ -n "$heap_churn" ]] && record_args+=(--heap-churn "$heap_churn")
 
 echo "== record submission (generate ledger files) =="
 rec_out="$(bash scripts/record.sh "${record_args[@]}")"

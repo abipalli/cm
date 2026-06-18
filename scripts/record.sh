@@ -16,6 +16,9 @@ note=""
 attempts=""
 work=""
 memcost=""
+lines=""
+heap_peak=""
+heap_churn=""
 ci_mode=0
 diff_base="HEAD"
 
@@ -27,6 +30,9 @@ while [[ $# -gt 0 ]]; do
     --attempts) attempts="${2:-}"; shift 2 ;;
     --work) work="${2:-}"; shift 2 ;;
     --memcost) memcost="${2:-}"; shift 2 ;;
+    --lines) lines="${2:-}"; shift 2 ;;
+    --heap-peak) heap_peak="${2:-}"; shift 2 ;;
+    --heap-churn) heap_churn="${2:-}"; shift 2 ;;
     --ci) ci_mode=1; shift ;;
     --diff-base) diff_base="${2:-}"; shift 2 ;;
     -h|--help)
@@ -207,6 +213,15 @@ mkdir -p history/entries
   fi
   if [[ -n "$memcost" ]]; then
     echo "| MEMCOST | ${memcost} |"
+  fi
+  if [[ -n "$lines" ]]; then
+    echo "| LINES | ${lines} |"
+  fi
+  if [[ -n "$heap_peak" ]]; then
+    echo "| HEAP_PEAK | ${heap_peak} |"
+  fi
+  if [[ -n "$heap_churn" ]]; then
+    echo "| HEAP_CHURN | ${heap_churn} |"
   fi
   echo "| Status | ${status} |"
   echo
